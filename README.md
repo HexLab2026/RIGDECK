@@ -3,7 +3,7 @@
 
 **A phone cab panel for Euro Truck Simulator 2 & American Truck Simulator.**
 
-RigDeck turns your phone into a second control screen for ETS2. A small
+RigDeck turns your phone into a second control screen for ETS2 & ATS. A small
 script runs on your gaming PC and your phone connects to it over your home
 Wi-Fi — either through any web browser, or through a dedicated Android app that
 finds the PC on the network automatically (no typing IP addresses).
