@@ -22,32 +22,10 @@ the keyboard or wheel, just from your phone.
 - **Suspension** — front, rear, and trailer, raise/lower, plus a level reset
 - **Lights** — headlights and high beam, with indicators that glow when they're
   actually on (they mirror the truck's real state, so they light up even if you
-  use the keyboard or wheel)
+  use the keyboard or wheel) HazardLights.
 - **Trailer** — couple/release (guarded with a hold-to-arm so you can't knock it
   by accident) and lift/drop trailer axle
-- **Engine start** — but only once your seatbelt is on (see below)
-
-### Seatbelt interlock
-Tap the belt icon before the truck will start. The ignition is moved to a hidden
-key that only the panel ever sends, so the engine **physically cannot start**
-until you've buckled up — you can't fake it from the keyboard. The belt resets
-at the start of every session, so it stays a proper pre-drive ritual. If the
-engine ever starts unbuckled (a wheel button, auto-start), the panel shuts it
-back off and plays a warning chime.
-
-### Pre-drive walkaround — DVSA-style inspection
-Use the in-game freecam to "walk" around your rig and tick off a real inspection
-checklist on the phone. Items start **red** and turn **green** as you check them:
-
-- **Unit (cab):** lights & indicators, mirrors & glass, wipers & washers, horn,
-  tyres & wheel nuts, oil & coolant, air build-up & leaks, fifth wheel &
-  mounting
-- **Trailer:** kingpin locked (tug test), air lines & susies, trailer lights,
-  trailer tyres, load security/doors, landing legs stowed, number plate &
-  markers, brake check
-
-The unit list holds for the whole session. The **trailer list wipes itself
-every time you couple a new trailer**, so every load gets a fresh walkaround.
+- Engine start
 
 ### Active job screen
 A live consignment card showing:
@@ -134,9 +112,6 @@ In **Options → Keys & Buttons**, with **Num Lock ON**, set:
 | Light modes | L (default) |
 | High beam | K (default) |
 | **Engine start/stop** | **Numpad ∗** — and **remove E** from this bind |
-
-Also in **Options → Gameplay**, turn **off "Automatic engine start"** — otherwise
-pressing the throttle starts the engine and bypasses the seatbelt interlock.
 
 ### 4. Run it
 On the PC:
