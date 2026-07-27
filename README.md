@@ -96,7 +96,7 @@ On the gaming PC, with Python installed:
 pip install flask truck-telemetry pydirectinput
 ```
 
-### 3. Key bindings in ETS2
+### 3. Key bindings in ETS2 & ATS
 In **Options → Keys & Buttons**, with **Num Lock ON**, set:
 
 | Function | Key |
@@ -149,7 +149,7 @@ when prompted (this covers both the panel and the app's auto-discovery).
 
 ## Requirements at a glance
 
-- Euro Truck Simulator 2 on PC (Windows)
+- Euro Truck Simulator 2 / American Truck Simulator on PC (Windows)
 - The free SCS SDK telemetry plugin
 - Python 3 with `flask`, `truck-telemetry`, `pydirectinput`
 - A phone on the same Wi-Fi (Android for the app; any phone for the browser)
