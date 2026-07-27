@@ -1,0 +1,6 @@
+{
+  "version": "3.5",
+  "url": "https://github.com/HexLab2026/RIGDECK/releases/latest",
+  "download": "https://github.com/HexLab2026/RIGDECK/releases/latest/download/RigDeck.exe",
+  "notes": "Single-exe build. If it wont start (Python DLL error), add a Defender exclusion."
+}
