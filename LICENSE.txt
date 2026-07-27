@@ -1,0 +1,25 @@
+RigDeck — Licence
+=================
+
+Copyright (c) 2026 HexLab / RigDeck. All rights reserved.
+
+This software is provided for personal, non-commercial use.
+
+You MAY:
+  - Use RigDeck for your own personal Euro Truck Simulator 2 / American
+    Truck Simulator play.
+  - Make copies for your own use across your own devices.
+
+You MAY NOT, without prior written permission:
+  - Sell, rent, license or commercially exploit this software.
+  - Redistribute it, modified or unmodified, including bundling with other
+    software or mods.
+  - Remove or alter the RigDeck branding, this licence, or authorship notices.
+
+This is a third-party tool, not affiliated with, endorsed by, or associated
+with SCS Software. "Euro Truck Simulator 2" and "American Truck Simulator"
+are trademarks of their respective owners.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
