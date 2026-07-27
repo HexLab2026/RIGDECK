@@ -22,10 +22,13 @@ the keyboard or wheel, just from your phone.
 - **Suspension** — front, rear, and trailer, raise/lower, plus a level reset
 - **Lights** — headlights and high beam, with indicators that glow when they're
   actually on (they mirror the truck's real state, so they light up even if you
-  use the keyboard or wheel) HazardLights.
+  use the keyboard or wheel)
+  HazardLights.
+- Engine start.
+- HandBrake
 - **Trailer** — couple/release (guarded with a hold-to-arm so you can't knock it
   by accident) and lift/drop trailer axle
-- Engine start
+
 
 ### Active job screen
 A live consignment card showing:
