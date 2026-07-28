@@ -167,7 +167,7 @@ from flask import Flask, Response, jsonify, request
 # ----------------------------------------------------------------------
 # Version + auto-update check (notify only - never overwrites itself)
 # ----------------------------------------------------------------------
-APP_VERSION = "3.6"          # bump this when you cut a new release
+APP_VERSION = "3.7"          # bump this when you cut a new release
 
 UPDATE_URL   = "https://raw.githubusercontent.com/HexLab2026/RIGDECK/main/version.json"
 RELEASES_URL = "https://github.com/HexLab2026/RIGDECK/releases/latest"
