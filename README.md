@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/30439758/README.md)
 <div align="center">
 
 # 🛰️ RIGDECK
@@ -71,9 +70,6 @@ finds your PC automatically.
 3. On your phone (same Wi-Fi), open that address in a browser — or open the RigDeck Android app,
    which finds the PC automatically.
 4. Add it to your home screen for a fullscreen, app-like panel.
-
-### Build it yourself
-See [`BUILD.md`](BUILD.md) — one double-click on Windows and it compiles the exe for you.
 
 ---
 
