@@ -1,6 +1,6 @@
 """
 ==========================================================================
-  rigdeck.py  —  RIGDECK  ·  v3.0
+  rigdeck.py  —  RIGDECK  ·  v3.6
 ==========================================================================
   Phone-screen cab panel for Euro Truck Simulator 2.
 
@@ -105,6 +105,7 @@ SETUP (one time)  —  unchanged from v1.0, skip if already running
      Suspension reset ...... Numpad 5
      Parking brake ......... Numpad +   (bind in-game; panel-owned)
      Hazard lights ......... \\  (backslash)  (bind in-game; panel-owned)
+     Cab lift axle ......... ,  (comma)      (bind in-game; panel-owned)
      Attach/detach trailer . stays on default T
      Engine start/stop ..... Numpad *   AND REMOVE E from this bind —
                              the panel is now the only ignition switch.
@@ -167,7 +168,7 @@ from flask import Flask, Response, jsonify, request
 # ----------------------------------------------------------------------
 # Version + auto-update check (notify only - never overwrites itself)
 # ----------------------------------------------------------------------
-APP_VERSION = "3.5"          # bump this when you cut a new release
+APP_VERSION = "3.6"          # bump this when you cut a new release
 
 UPDATE_URL   = "https://raw.githubusercontent.com/HexLab2026/RIGDECK/main/version.json"
 RELEASES_URL = "https://github.com/HexLab2026/RIGDECK/releases/latest"
@@ -241,6 +242,7 @@ try:
         "num4": 0x4B, "num5": 0x4C, "num6": 0x4D, "num7": 0x47,
         "num8": 0x48, "num9": 0x49,
         "numdot": 0x53, "numminus": 0x4A, "numstar": 0x37, "numplus": 0x4E,
+        "comma": 0x33,   # cab/tractor lift axle
         "numslash": 0xB5,
         # window keys: off the numpad to avoid ReShade (Home) / SnowyMoon clashes
         "lbracket": 0x1A, "rbracket": 0x1B, "semicolon": 0x27, "quote": 0x28,
@@ -337,6 +339,7 @@ FIELDS = {
     "wear_chassis": ["wearChassis"],
     "wear_wheels":  ["wearWheels"],
     # trailer axle (NEW v1.5)
+    "cabaxle_ind":  ["liftAxleIndicator"],
     "axle_ind":     ["trailerLiftAxleIndicator", "liftAxleIndicatorTrailer"],
     "axle_raw":     ["trailerLiftAxle", "liftAxleTrailer"],
     # job tracking (NEW v1.8)
@@ -513,7 +516,8 @@ HOLD_KEYS = {"num8", "num2", "num4", "num6", "num0", "numdot",
              "lbracket", "rbracket", "semicolon", "quote"}   # windows on punctuation cluster
 PARK_KEY = "numplus"      # parking brake: bind in-game to Numpad +, panel-owned
 HAZ_KEY  = "backslash"    # hazard lights: bind in-game to \\ , panel-owned (numpad-/ was unreliable)
-TAP_KEYS = {"t", ENGINE_KEY, "num5", "l", "k", "numminus", PARK_KEY, HAZ_KEY}
+CABAXLE_KEY = "comma"    # tractor/cab lift axle: bind in-game to , (comma)
+TAP_KEYS = {"t", ENGINE_KEY, "num5", "l", "k", "numminus", PARK_KEY, HAZ_KEY, CABAXLE_KEY}
 
 _held = {}                     # key -> last refresh time
 _held_lock = threading.Lock()
@@ -856,6 +860,8 @@ def tap():
         key = PARK_KEY
     elif key == "haz":
         key = HAZ_KEY
+    elif key == "cabaxle":
+        key = CABAXLE_KEY
     if key not in TAP_KEYS:
         return jsonify(ok=False), 400
     if INPUT_OK:
@@ -1385,6 +1391,7 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
     </div>
     <div class="plate"><span class="tick tl"></span><span class="tick br"></span>
       <p class="pt">LIFT / DROP</p>
+      <div class="sw" id="cabaxle"><div class="well"><div class="cap">CAB AXLE<small id="cabaxlelbl">TAP</small></div></div></div>
       <div class="sw" id="axlelift"><div class="well"><div class="cap">TRAILER AXLE<small id="axlelbl">TAP</small></div></div></div>
     </div>
     <div class="plate"><span class="tick tl"></span><span class="tick br"></span>
@@ -1569,6 +1576,7 @@ function drawPark(){parkEl.classList.toggle("on",parkOn);
 parkEl.addEventListener("click",()=>{parkOn=!parkOn;post("/tap",{key:"park"});
   navigator.vibrate&&navigator.vibrate(25);drawPark();});
 let hazOn=false;
+let hazSynced=false;   // sync from telemetry once on connect, then latch
 const hazEl=$("haz");
 function drawHaz(){hazEl.classList.toggle("on",hazOn);
   $("hazlbl").textContent=hazOn?"HAZARDS ON":"HAZARDS";}
@@ -1580,7 +1588,7 @@ const tapBtn=(id,key)=>{const el=$(id);el.addEventListener("click",()=>{
   navigator.vibrate&&navigator.vibrate(25);
   setTimeout(()=>el.classList.remove("fired"),300);});};
 tapBtn("headl","l");tapBtn("highb","k");tapBtn("suspreset","num5");
-tapBtn("axlelift","numminus");
+tapBtn("axlelift","numminus");tapBtn("cabaxle","cabaxle");
 
 let ac=null;
 function tone(f1,f2,dur){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();
@@ -1640,12 +1648,16 @@ async function poll(){
     const r=await fetch("/telemetry");const d=await r.json();
     const dot=$("dot");
     if(!d.game){dot.className="dot wait";$("lt").textContent="GAME";
-      engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();fuelChime(false);rangeAlert(false);drawPD();return;}
+      engineOn=false;parkOn=false;drawPark();hazOn=false;hazSynced=false;drawHaz();fuelChime(false);rangeAlert(false);drawPD();return;}
     dot.className="dot ok";$("lt").textContent="LINK";
     engineOn=!!d.engine;
     parkOn=!!d.park;drawPark();
-    // hazards: the button latches its own state (press on / press off) so it
-    // never depends on the hazard telemetry field, which some plugin builds
+    // hazards: sync from the game ONCE when it first connects (so quitting with
+    // hazards on shows correctly on next start), then latch on the button's own
+    // state so an unreliable hazard field can't knock the light off mid-session.
+    if(!hazSynced){hazSynced=true;hazOn=!!d.haz;drawHaz();}
+    // after that first sync, the button latches its own state (press on / press
+    // off) and no longer depends on the hazard telemetry field, which some plugin
     // don't report. It stays lit + flashing until you press it again.
     drawPD();
 
@@ -1868,7 +1880,7 @@ def _print_banner():
     """Print startup info. Safe even when there's no console (windowed exe)."""
     lines = [
         "=" * 58,
-        "  RIGDECK  ·  CAB PANEL  v3.0",
+        "  RIGDECK  ·  CAB PANEL  v3.6",
         "=" * 58,
         f"  Phone URL :  http://{lan_ip()}:8600",
         f"  Debug     :  http://{lan_ip()}:8600/debug",
