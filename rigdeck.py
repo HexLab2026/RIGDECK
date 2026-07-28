@@ -1,6 +1,6 @@
 """
 ==========================================================================
-  rigdeck.py  —  RIGDECK  ·  v3.6
+  rigdeck.py  —  RIGDECK  ·  v3.7
 ==========================================================================
   Phone-screen cab panel for Euro Truck Simulator 2.
 
@@ -55,8 +55,7 @@
                     the CONTROLS page. Low-fuel and fuel-range alerts
                     are unaffected.
   v3.0          : RIGDECK — new name, mark, palette (gunmetal /
-                    steel / safety orange) and type. Set CARRIER_NAME
-                    below for the fleet name printed on every POD sheet.
+                    steel / safety orange) and type.
   v1.9          : HIDDEN IGNITION — engine start/stop lives on Numpad *
                     in-game, a key only this panel ever sends, so the
                     truck starts from the panel rather than the keyboard.
@@ -308,6 +307,7 @@ FIELDS = {
     "engine":       ["engineEnabled", "engineOn"],              # bool
     "park_brake":   ["parkingBrake", "parkBrake", "parkBrakeOn"],  # bool
     "hazards":      ["lightsHazards", "hazardWarning"],            # bool
+    "wipers":       ["wipers", "wipersOn"],                        # bool
     "blink_l_act":  ["blinkerLeftActive"],    "blink_l_on":  ["blinkerLeftOn"],
     "blink_r_act":  ["blinkerRightActive"],   "blink_r_on":  ["blinkerRightOn"],
     # lights (NEW v1.4)
@@ -517,7 +517,7 @@ HOLD_KEYS = {"num8", "num2", "num4", "num6", "num0", "numdot",
 PARK_KEY = "numplus"      # parking brake: bind in-game to Numpad +, panel-owned
 HAZ_KEY  = "backslash"    # hazard lights: bind in-game to \\ , panel-owned (numpad-/ was unreliable)
 CABAXLE_KEY = "comma"    # tractor/cab lift axle: bind in-game to , (comma)
-TAP_KEYS = {"t", ENGINE_KEY, "num5", "l", "k", "numminus", PARK_KEY, HAZ_KEY, CABAXLE_KEY}
+TAP_KEYS = {"t", ENGINE_KEY, "num5", "l", "k", "v", "numminus", PARK_KEY, HAZ_KEY, CABAXLE_KEY}
 
 _held = {}                     # key -> last refresh time
 _held_lock = threading.Lock()
@@ -613,13 +613,11 @@ def _sig_svg(name, seed):
         f'stroke-linecap="round" stroke-linejoin="round"/></g></svg>')
 
 
-# Your HexLine driver — signs every POD. Set this to your driver's name;
+# Your driver — signs every POD. Set this to your driver's name;
 # the signature scrawl is generated once and stays identical all session,
 # the way a real driver's signature would.
 DRIVER_NAME = "A. Driver"
 
-# Carrier name printed on every proof-of-delivery sheet — set to your fleet.
-CARRIER_NAME = "HEXLINE LOGISTICS"
 _DRIVER_SIG = None   # built lazily so DRIVER_NAME edits are picked up
 
 
@@ -1017,6 +1015,7 @@ def telemetry():
         paused=bool(getf(data, "paused")),
         engine=bool(getf(data, "engine")),
         park=bool(getf(data, "park_brake")),
+        wipers=bool(getf(data, "wipers")),
         haz=bool(getf(data, "hazards"))
             or (
                 (bool(getf(data, "blink_l_act")) or bool(getf(data, "blink_l_on")))
@@ -1126,7 +1125,7 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
 
 /* tabs */
 .tabs{display:flex;gap:8px;margin:12px 0}
-.tab{flex:1;text-align:center;padding:9px 0;font-weight:700;letter-spacing:1px;font-size:11px;
+.tab{flex:1;text-align:center;padding:13px 0;font-weight:700;letter-spacing:1px;font-size:12.5px;
   color:var(--lab);background:var(--steel);border:1px solid var(--line);
   clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)}
 .tab.on{color:var(--ink);background:var(--acc);border-color:var(--acc)}
@@ -1144,6 +1143,8 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .row1{display:grid;grid-template-columns:1fr;gap:10px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.row3b{margin-top:10px}
+.pd.sp{visibility:hidden;pointer-events:none}
 .sw{position:relative}
 .well{background:var(--well);border:1px solid var(--line);padding:6px;
   box-shadow:inset 0 3px 8px rgba(0,0,0,.7)}
@@ -1162,6 +1163,8 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
 .pd.on .cap,.pd.run .cap{border-color:var(--acc);color:var(--acc)}
 .pd.park .bicon{color:var(--acc);opacity:.45}
 .pd#haz.on .bicon{color:#ff4d4d;opacity:1}
+.pd#wipers.on{border-color:var(--acc)}
+.pd#wipers.on .bicon{color:var(--acc);opacity:1}
 @keyframes hazflash{
   0%,100%{border-color:#ff4d4d;box-shadow:0 0 16px rgba(255,60,60,.65)}
   50%{border-color:rgba(255,77,77,.25);box-shadow:0 0 4px rgba(255,60,60,.15)}}
@@ -1353,6 +1356,22 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
                 stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
             </svg>
             <small id="parklbl">PARK BRAKE</small>
+          </div></div>
+        </div>
+      </div>
+      <div class="row3 row3b">
+        <div class="pd sp"></div>
+        <div class="pd sp"></div>
+        <div class="pd" id="wipers">
+          <div class="well"><div class="cap">
+            <svg class="bicon" viewBox="0 0 48 48">
+              <path d="M8 40 Q8 20 24 18" fill="none" stroke="currentColor"
+                stroke-width="4" stroke-linecap="round"/>
+              <path d="M24 18 Q40 20 40 40" fill="none" stroke="currentColor"
+                stroke-width="4" stroke-linecap="round" opacity="0.35"/>
+              <circle cx="24" cy="18" r="3" fill="currentColor"/>
+            </svg>
+            <small id="wiperlbl">WIPERS</small>
           </div></div>
         </div>
       </div>
@@ -1579,6 +1598,7 @@ document.querySelectorAll(".sw[data-key]").forEach(sw=>{
 })();
 
 /* engine start */
+let _fcState=null;   // fuel-reachability hysteresis state: null|"ok"|"warn"|"crit"
 let engineOn=false;
 const startEl=$("engstart");
 function drawPD(){
@@ -1603,7 +1623,7 @@ const tapBtn=(id,key)=>{const el=$(id);el.addEventListener("click",()=>{
   post("/tap",{key});el.classList.add("fired");
   navigator.vibrate&&navigator.vibrate(25);
   setTimeout(()=>el.classList.remove("fired"),300);});};
-tapBtn("headl","l");tapBtn("highb","k");tapBtn("suspreset","num5");
+tapBtn("headl","l");tapBtn("highb","k");tapBtn("suspreset","num5");tapBtn("wipers","v");
 tapBtn("axlelift","numminus");tapBtn("cabaxle","cabaxle");
 
 let ac=null;
@@ -1664,10 +1684,11 @@ async function poll(){
     const r=await fetch("/telemetry");const d=await r.json();
     const dot=$("dot");
     if(!d.game){dot.className="dot wait";$("lt").textContent="GAME";
-      engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();fuelChime(false);rangeAlert(false);drawPD();return;}
+      engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();$("wipers").classList.remove("on");fuelChime(false);rangeAlert(false);drawPD();return;}
     dot.className="dot ok";$("lt").textContent="LINK";
     engineOn=!!d.engine;
     parkOn=!!d.park;drawPark();
+    $("wipers").classList.toggle("on",!!d.wipers);
     // hazards: this telemetry plugin does not report hazard state (no
     // lightsHazards field, blinker flags stay false), so the button simply
     // tracks its own on/off state. It starts OFF on each connect; if hazards
@@ -1751,15 +1772,28 @@ async function poll(){
     const active=(d.job&&d.job.on);
     if(!active||rng==null||dist==null||dist<1){
       fc.className="fuelchk";ft.textContent="FUEL RANGE \u2014";
-      rangeAlert(false);
+      rangeAlert(false);_fcState=null;
     }else{
-      const margin=dist*1.15;                 // want 15% headroom over the route
+      // hysteresis: once in a worse state, need a bit more margin to climb
+      // back out, so small range-estimate wobble near a boundary doesn't
+      // flicker the light on and off every poll.
       const over=rng-dist;
-      if(rng<dist){                            // physically won't reach
+      const relax=dist*0.04;                   // ~4% of route as a dead-band
+      const margin=dist*1.15;                  // want 15% headroom over the route
+      let next=_fcState;
+      if(_fcState==="crit"){
+        next = (rng < dist+relax) ? "crit" : (rng<margin ? "warn":"ok");
+      }else if(_fcState==="warn"){
+        next = (rng < dist) ? "crit" : (rng < margin+relax ? "warn":"ok");
+      }else{ // ok or null: normal thresholds
+        next = (rng<dist)?"crit":(rng<margin?"warn":"ok");
+      }
+      _fcState=next;
+      if(next==="crit"){
         fc.className="fuelchk crit";
-        ft.textContent="WON'T REACH \u2014 SHORT BY "+Math.round(dist-rng)+" KM";
+        ft.textContent="WON'T REACH \u2014 SHORT BY "+Math.round(Math.max(0,dist-rng))+" KM";
         rangeAlert(true);
-      }else if(rng<margin){                    // reaches, but on fumes
+      }else if(next==="warn"){
         fc.className="fuelchk warn";
         ft.textContent="TIGHT \u2014 "+Math.round(over)+" KM SPARE, FUEL SOON";
         rangeAlert(true);
@@ -1818,7 +1852,7 @@ function renderJobs(arr){
     let pod="";
     if(J.status!=="FAILED"&&J.signoff){const s=J.signoff;
       pod='<div class="pod">'
-        +'<div class="podlogo">'+DECKMARK+'<span class="lt">__CARRIER__</span></div>'
+        +'<div class="podlogo">'+DECKMARK+'</div>'
         +'<div class="podh">PROOF OF DELIVERY</div>'
         +'<div class="sigwrap">'
         +'<div class="sigbox">'+s.driver_sig
@@ -1875,7 +1909,7 @@ setInterval(loadJobs,8000);loadJobs();
 
 @app.route("/")
 def index():
-    return Response(PAGE.replace("__CARRIER__", CARRIER_NAME), mimetype="text/html")
+    return Response(PAGE, mimetype="text/html")
 
 
 # ----------------------------------------------------------------------
@@ -1894,7 +1928,7 @@ def _print_banner():
     """Print startup info. Safe even when there's no console (windowed exe)."""
     lines = [
         "=" * 58,
-        "  RIGDECK  ·  CAB PANEL  v3.6",
+        "  RIGDECK  ·  CAB PANEL  v3.7",
         "=" * 58,
         f"  Phone URL :  http://{lan_ip()}:8600",
         f"  Debug     :  http://{lan_ip()}:8600/debug",
