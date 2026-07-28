@@ -308,8 +308,8 @@ FIELDS = {
     "engine":       ["engineEnabled", "engineOn"],              # bool
     "park_brake":   ["parkingBrake", "parkBrake", "parkBrakeOn"],  # bool
     "hazards":      ["lightsHazards", "hazardWarning"],            # bool
-    "blink_l":      ["blinkerLeftActive", "blinkerLeftOn"],       # bool
-    "blink_r":      ["blinkerRightActive", "blinkerRightOn"],     # bool
+    "blink_l_act":  ["blinkerLeftActive"],    "blink_l_on":  ["blinkerLeftOn"],
+    "blink_r_act":  ["blinkerRightActive"],   "blink_r_on":  ["blinkerRightOn"],
     # lights (NEW v1.4)
     "light_low":    ["lightsBeamLow", "beamLow"],
     "light_high":   ["lightsBeamHigh", "beamHigh"],
@@ -1018,7 +1018,11 @@ def telemetry():
         engine=bool(getf(data, "engine")),
         park=bool(getf(data, "park_brake")),
         haz=bool(getf(data, "hazards"))
-            or (bool(getf(data, "blink_l")) and bool(getf(data, "blink_r"))),
+            or (
+                (bool(getf(data, "blink_l_act")) or bool(getf(data, "blink_l_on")))
+                and
+                (bool(getf(data, "blink_r_act")) or bool(getf(data, "blink_r_on")))
+            ),
         speed_kmh=abs(float(speed)) * 3.6,
         odo_km=float(odo) if isinstance(odo, (int, float)) else None,
         trip_km=trip,
@@ -1044,7 +1048,20 @@ def update():
 @app.route("/debug")
 def debug():
     data = read_telemetry()
-    txt = json.dumps(data, indent=2, default=str) if data else "telemetry not connected"
+    if not data:
+        return Response("telemetry not connected", mimetype="text/plain")
+    # surface every hazard/blinker-related field so we can see what's actually set
+    watch = ["lightsHazards", "hazardWarning",
+             "blinkerLeftActive", "blinkerRightActive",
+             "blinkerLeftOn", "blinkerRightOn"]
+    head = ["=== HAZARD FIELDS (what the panel reads) ==="]
+    for k in watch:
+        head.append(f"  {k:22} = {data.get(k, '<<NOT IN TELEMETRY>>')}")
+    head.append(f"  derived haz (what button syncs) = "
+                f"{bool(getf(data,'hazards')) or (bool(getf(data,'blink_l')) and bool(getf(data,'blink_r')))}")
+    head.append("")
+    head.append("=== FULL TELEMETRY ===")
+    txt = "\n".join(head) + "\n" + json.dumps(data, indent=2, default=str)
     return Response(txt, mimetype="text/plain")
 
 
@@ -1576,7 +1593,6 @@ function drawPark(){parkEl.classList.toggle("on",parkOn);
 parkEl.addEventListener("click",()=>{parkOn=!parkOn;post("/tap",{key:"park"});
   navigator.vibrate&&navigator.vibrate(25);drawPark();});
 let hazOn=false;
-let hazSynced=false;   // sync from telemetry once on connect, then latch
 const hazEl=$("haz");
 function drawHaz(){hazEl.classList.toggle("on",hazOn);
   $("hazlbl").textContent=hazOn?"HAZARDS ON":"HAZARDS";}
@@ -1648,16 +1664,14 @@ async function poll(){
     const r=await fetch("/telemetry");const d=await r.json();
     const dot=$("dot");
     if(!d.game){dot.className="dot wait";$("lt").textContent="GAME";
-      engineOn=false;parkOn=false;drawPark();hazOn=false;hazSynced=false;drawHaz();fuelChime(false);rangeAlert(false);drawPD();return;}
+      engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();fuelChime(false);rangeAlert(false);drawPD();return;}
     dot.className="dot ok";$("lt").textContent="LINK";
     engineOn=!!d.engine;
     parkOn=!!d.park;drawPark();
-    // hazards: sync from the game ONCE when it first connects (so quitting with
-    // hazards on shows correctly on next start), then latch on the button's own
-    // state so an unreliable hazard field can't knock the light off mid-session.
-    if(!hazSynced){hazSynced=true;hazOn=!!d.haz;drawHaz();}
-    // after that first sync, the button latches its own state (press on / press
-    // off) and no longer depends on the hazard telemetry field, which some plugin
+    // hazards: this telemetry plugin does not report hazard state (no
+    // lightsHazards field, blinker flags stay false), so the button simply
+    // tracks its own on/off state. It starts OFF on each connect; if hazards
+    // happen to be physically on, one tap syncs them. The button latches its
     // don't report. It stays lit + flashing until you press it again.
     drawPD();
 
