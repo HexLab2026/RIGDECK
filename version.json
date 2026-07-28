@@ -2,5 +2,5 @@
   "version": "3.7",
   "url": "https://github.com/HexLab2026/RIGDECK/releases/latest",
   "download": "https://github.com/HexLab2026/RIGDECK/releases/latest/download/RigDeck.exe",
-  "notes": "added wipers"
+  "notes": "Wipers control, fuel-warning flicker fixed, bigger tabs, HEXLINE removed from POD"
 }

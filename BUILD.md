@@ -25,9 +25,9 @@ an update:
 4. Edit **`version.json`** so `version` matches, and update the notes:
    ```json
    {
-     "version": "3.6",
-     "url": "https://github.com/HexLab2026/RIGDECK",
-     "download": "https://raw.githubusercontent.com/HexLab2026/RIGDECK/main/RigDeck.exe",
+     "version": "3.8",
+     "url": "https://github.com/HexLab2026/RIGDECK/releases/latest",
+     "download": "https://github.com/HexLab2026/RIGDECK/releases/latest/download/RigDeck.exe",
      "notes": "What changed in this build"
    }
    ```
@@ -65,15 +65,15 @@ mismatch once:
 
 **Quickest test (no rebuild):**
 1. Publish `version.json` to your repo's `main` with a *higher* number than your running build,
-   e.g. set `"version": "3.6"` while your exe is still 3.5.
-2. Start RigDeck. Within a few seconds the PC window shows **UPDATE AVAILABLE — v3.6** and the
+   e.g. set `"version": "3.8"` while your exe is still 3.7.
+2. Start RigDeck. Within a few seconds the PC window shows **UPDATE AVAILABLE — v3.8** and the
    phone shows its notice.
-3. That confirms the check + both banners work. (Update Now will then try to download whatever
-   `download` points at — so only click it once you've actually attached a real newer exe.)
+3. That confirms the check + both banners work. The PC button opens your Releases page in the
+   browser — it doesn't download or swap anything itself, so this is safe to test any time.
 4. Set `version.json` back to match once you're done.
 
-**Full test:** cut a real v3.6 release with a rebuilt exe attached, leave your local exe at 3.5,
-and click Update Now — it should download, swap and relaunch as 3.6.
+**Full test:** cut a real v3.8 release with a rebuilt exe attached, leave your local exe at 3.7,
+click the button on the PC window, and confirm it opens the release with the exe attached.
 
 ## Publishing a release (step by step)
 
@@ -82,8 +82,8 @@ release with `RigDeck.exe` attached — otherwise the page looks empty.
 
 1. **Build:** run `BUILD_EXE.bat`. You get a single file: `dist\RigDeck.exe`.
 2. On GitHub: your repo -> **Releases** -> **Draft a new release**.
-3. **Tag:** type `v3.5`, click "Create new tag: v3.5 on publish".
-4. **Title:** `RigDeck v3.5`.
+3. **Tag:** type `v3.7`, click "Create new tag: v3.7 on publish".
+4. **Title:** `RigDeck v3.7`.
 5. **Attach:** drag `RigDeck.exe` into the "Attach binaries" box; wait for the upload.
 6. Click **Publish release**.
 
@@ -91,7 +91,7 @@ Now `https://github.com/HexLab2026/RIGDECK/releases/latest` shows the release wi
 `RigDeck.exe` attached, and the in-app button lands people there.
 
 **Next version:** bump `APP_VERSION` in `rigdeck.py`, rebuild, publish a new release
-(tag `v3.6`, attach the new exe), then bump `version` in `version.json` and commit it to
+(tag `v3.8`, attach the new exe), then bump `version` in `version.json` and commit it to
 `main` so running copies show the update notice.
 
 ## If RigDeck won't start: "Failed to load Python DLL"

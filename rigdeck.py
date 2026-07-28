@@ -1143,8 +1143,6 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .row1{display:grid;grid-template-columns:1fr;gap:10px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.row3b{margin-top:10px}
-.pd.sp{visibility:hidden;pointer-events:none}
 .sw{position:relative}
 .well{background:var(--well);border:1px solid var(--line);padding:6px;
   box-shadow:inset 0 3px 8px rgba(0,0,0,.7)}
@@ -1163,8 +1161,6 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
 .pd.on .cap,.pd.run .cap{border-color:var(--acc);color:var(--acc)}
 .pd.park .bicon{color:var(--acc);opacity:.45}
 .pd#haz.on .bicon{color:#ff4d4d;opacity:1}
-.pd#wipers.on{border-color:var(--acc)}
-.pd#wipers.on .bicon{color:var(--acc);opacity:1}
 @keyframes hazflash{
   0%,100%{border-color:#ff4d4d;box-shadow:0 0 16px rgba(255,60,60,.65)}
   50%{border-color:rgba(255,77,77,.25);box-shadow:0 0 4px rgba(255,60,60,.15)}}
@@ -1359,21 +1355,8 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
           </div></div>
         </div>
       </div>
-      <div class="row3 row3b">
-        <div class="pd sp"></div>
-        <div class="pd sp"></div>
-        <div class="pd" id="wipers">
-          <div class="well"><div class="cap">
-            <svg class="bicon" viewBox="0 0 48 48">
-              <path d="M8 40 Q8 20 24 18" fill="none" stroke="currentColor"
-                stroke-width="4" stroke-linecap="round"/>
-              <path d="M24 18 Q40 20 40 40" fill="none" stroke="currentColor"
-                stroke-width="4" stroke-linecap="round" opacity="0.35"/>
-              <circle cx="24" cy="18" r="3" fill="currentColor"/>
-            </svg>
-            <small id="wiperlbl">WIPERS</small>
-          </div></div>
-        </div>
+      <div class="row1" style="margin-top:10px">
+        <div class="sw" id="wipers"><div class="well"><div class="cap">WIPERS<small id="wiperlbl">TAP</small></div></div></div>
       </div>
     </div>
     <div class="plate"><span class="tick tl"></span><span class="tick br"></span>
@@ -1684,11 +1667,15 @@ async function poll(){
     const r=await fetch("/telemetry");const d=await r.json();
     const dot=$("dot");
     if(!d.game){dot.className="dot wait";$("lt").textContent="GAME";
-      engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();$("wipers").classList.remove("on");fuelChime(false);rangeAlert(false);drawPD();return;}
+      engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();$("wipers").classList.remove("lit");$("wiperlbl").textContent="TAP";fuelChime(false);rangeAlert(false);drawPD();return;}
     dot.className="dot ok";$("lt").textContent="LINK";
     engineOn=!!d.engine;
     parkOn=!!d.park;drawPark();
-    $("wipers").classList.toggle("on",!!d.wipers);
+    /* wipers */
+    const wp=$("wipers");
+    if(!("wipers" in d)){wp.classList.remove("lit");$("wiperlbl").textContent="TAP";}
+    else{wp.classList.toggle("lit",!!d.wipers);
+      $("wiperlbl").textContent=d.wipers?"ON":"OFF";}
     // hazards: this telemetry plugin does not report hazard state (no
     // lightsHazards field, blinker flags stay false), so the button simply
     // tracks its own on/off state. It starts OFF on each connect; if hazards
@@ -1928,7 +1915,7 @@ def _print_banner():
     """Print startup info. Safe even when there's no console (windowed exe)."""
     lines = [
         "=" * 58,
-        "  RIGDECK  ·  CAB PANEL  v3.7",
+        "  RIGDECK  ·  CAB PANEL  v3.0",
         "=" * 58,
         f"  Phone URL :  http://{lan_ip()}:8600",
         f"  Debug     :  http://{lan_ip()}:8600/debug",
