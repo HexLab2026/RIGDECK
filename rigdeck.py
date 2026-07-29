@@ -1154,7 +1154,9 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
 .cap small{display:block;font-size:9px;letter-spacing:2px;color:var(--lab);margin-top:3px}
 
 /* engine start button */
-.pd .cap{padding:12px 4px;cursor:pointer}
+.pd .well{height:100%;box-sizing:border-box}
+.pd .cap{padding:12px 4px;cursor:pointer;height:100%;box-sizing:border-box;
+  display:flex;flex-direction:column;align-items:center;justify-content:center}
 .pd .cap:active{transform:translateY(2px)}
 .bicon{width:36px;height:36px;display:block;margin:0 auto 4px;color:var(--lab)}
 .pd.on .bicon,.pd.run .bicon{color:var(--acc);filter:drop-shadow(0 0 8px rgba(255,106,43,.55))}
