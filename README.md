@@ -71,6 +71,9 @@ finds your PC automatically.
    which finds the PC automatically.
 4. Add it to your home screen for a fullscreen, app-like panel.
 
+### Build it yourself
+See [`BUILD.md`](BUILD.md) — one double-click on Windows and it compiles the exe for you.
+
 ---
 
 ## 🎮 One-time game setup
