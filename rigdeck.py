@@ -1,6 +1,6 @@
 """
 ==========================================================================
-  rigdeck.py  —  RIGDECK  ·  v3.7
+  rigdeck.py  —  RIGDECK  ·  v3.0
 ==========================================================================
   Phone-screen cab panel for Euro Truck Simulator 2.
 
@@ -477,6 +477,12 @@ _FUEL_WINDOW_KM = 40.0          # average consumption over the last ~40 km
 _FUEL_MIN_KM = 2.0              # need at least this much distance to estimate
 _FUEL_SAMPLE_SEC = 60.0         # only record a new sample once a minute
 _fuel_last_t = 0.0              # timestamp of the last recorded sample
+# Last good reading from OUR model, kept so a brief dropout (a gap in polling
+# while the phone screen is off, a ferry, a refuel) doesn't make the range jump
+# to the game's built-in estimate — which is a very different number and makes
+# the fuel-range warning light flick on and off.
+_fuel_last_good = {"l100": None, "range": None, "t": 0.0}
+_FUEL_HOLD_SEC = 900.0          # keep showing our last figure for up to 15 min
 
 
 def _estimate(hist, fuel_l):
@@ -987,6 +993,24 @@ def telemetry():
     avg = num("fuel_avg")
     # our own smoothed model from actual burn over distance
     _our_l100, _our_range = update_fuel_model(getf(data, "odometer"), num("fuel"))
+
+    # Keep our learned burn rate across brief dropouts. The model resets its
+    # window on a polling gap / ferry / refuel, and without this the displayed
+    # range would jump to the game's built-in estimate (a very different figure)
+    # and then jump back — which shows up as the fuel warning light flicking on
+    # and off. We cache the consumption rate, not the range, so the held value
+    # still tracks the fuel actually left in the tank.
+    _fuel_now = num("fuel")
+    _now = time.time()
+    if _our_l100 is not None and _our_l100 > 0:
+        _fuel_last_good["l100"] = _our_l100
+        _fuel_last_good["t"] = _now
+    elif (_fuel_last_good["l100"] and
+          (_now - _fuel_last_good["t"]) <= _FUEL_HOLD_SEC and
+          isinstance(_fuel_now, (int, float))):
+        _our_l100 = _fuel_last_good["l100"]
+        _our_range = _fuel_now / (_our_l100 / 100.0)
+
     avg100 = _our_l100 if _our_l100 is not None else ((avg * 100.0) if avg else None)
     frange = _our_range if _our_range is not None else num("fuel_range")
     rig = {
