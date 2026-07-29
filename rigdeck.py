@@ -368,6 +368,27 @@ def clean_str(v):
     return None
 
 
+def cargo_loaded(data):
+    """Is there actually cargo aboard?
+
+    This is deliberately NOT the same as 'is a trailer coupled'. With a market /
+    quick-job trailer you only couple up once you collect, so coupling happens to
+    coincide with being loaded. An OWNED trailer stays hitched permanently, so
+    coupling tells you nothing — it would read 'loaded' even when running empty.
+
+    Prefer the SDK's explicit cargo flag; fall back to cargo mass for older
+    plugin builds that don't report it. Returns True/False, or None if the
+    telemetry gives us nothing to go on.
+    """
+    v = getf(data, "loaded")
+    if v is not None:
+        return bool(v)
+    kg = getf(data, "cargo_kg")
+    if isinstance(kg, (int, float)):
+        return kg > 1.0        # any real cargo mass means something's aboard
+    return None
+
+
 def trailer_attached(data):
     """Coupling state; handles both flat and nested trailer layouts."""
     v = getf(data, "trailer_att")
@@ -997,6 +1018,7 @@ def telemetry():
         "dst_comp": clean_str(getf(data, "dst_comp")),
         "dst_city": clean_str(getf(data, "dst_city")),
         "coupled": trailer_attached(data),
+        "loaded": cargo_loaded(data),
         "due_min": int(due_min) if _valid_min(due_min) else None,
         "remain_min": remain,
         "income": int(income) if isinstance(income, (int, float)) and income > 0 else None,
@@ -1743,8 +1765,12 @@ async function poll(){
       $("jleft").classList.remove("low");}
     else{
       chip.textContent="ON ROUTE";chip.className="chip loaded";
-      if(j.coupled===true){chip2.style.display="";chip2.textContent="LOADED";chip2.className="chip loaded";}
-      else if(j.coupled===false){chip2.style.display="";chip2.textContent="UNLOADED";chip2.className="chip collect";}
+      /* Cargo state. Must come from real cargo data, not from whether a
+         trailer is hitched: an owned trailer is always hitched, so coupling
+         would wrongly read as LOADED while running empty. */
+      if(j.coupled===false){chip2.style.display="";chip2.textContent="NO TRAILER";chip2.className="chip collect";}
+      else if(j.loaded===true){chip2.style.display="";chip2.textContent="LOADED";chip2.className="chip loaded";}
+      else if(j.loaded===false){chip2.style.display="";chip2.textContent="EMPTY";chip2.className="chip collect";}
       else{chip2.style.display="none";}
       $("jcargo").textContent=j.cargo||"--";
       $("jmass").innerHTML=j.mass_t==null?"--":j.mass_t.toFixed(1)+" <span>t</span>";
