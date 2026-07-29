@@ -1158,6 +1158,9 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
 .pd .cap{padding:12px 4px;cursor:pointer;height:100%;box-sizing:border-box;
   display:flex;flex-direction:column;align-items:center;justify-content:center}
 .pd .cap:active{transform:translateY(2px)}
+/* tap-style bars (wipers, axles, reset) get the same physical press as the
+   tiles above — .sw.held covers hold-buttons, this covers a plain tap. */
+.sw .cap:active{transform:translateY(2px);border-color:var(--acc);color:var(--acc)}
 .bicon{width:36px;height:36px;display:block;margin:0 auto 4px;color:var(--lab)}
 .pd.on .bicon,.pd.run .bicon{color:var(--acc);filter:drop-shadow(0 0 8px rgba(255,106,43,.55))}
 .pd.on .cap,.pd.run .cap{border-color:var(--acc);color:var(--acc)}
