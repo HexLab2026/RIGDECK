@@ -1,6 +1,6 @@
 {
-  "version": "3.7",
+  "version": "3.8",
   "url": "https://github.com/HexLab2026/RIGDECK/releases/latest",
   "download": "https://github.com/HexLab2026/RIGDECK/releases/latest/download/RigDeck.exe",
-  "notes": "Wipers control, fuel-warning flicker fixed, bigger tabs, HEXLINE removed from POD"
+  "notes": "Added: diff lock control, auto tab switching, press feedback on bar buttons. Fixed: taps too short for the game to register (diff lock never fired, other buttons intermittent); ACTIVE JOB always showed LOADED with an owned trailer; fuel warning light flickering as range switched between our estimate and the game's; diff lock and hazard lights not staying on."
 }

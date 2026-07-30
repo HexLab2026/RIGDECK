@@ -1,6 +1,6 @@
 """
 ==========================================================================
-  rigdeck.py  —  RIGDECK  ·  v3.0
+  rigdeck.py  —  RIGDECK  ·  v3.8
 ==========================================================================
   Phone-screen cab panel for Euro Truck Simulator 2.
 
@@ -38,6 +38,77 @@
                     avg + top speed, income, EUR/km, fines picked up,
                     cargo damage, truck damage taken, early/late margin.
                     Log is per session (clears when this script exits).
+  v3.8          : DIFF LOCK + AUTO TAB SWITCHING, and three real bug fixes.
+                    ADDED
+                      - CONTROLS: DIFF LOCK button (own plate, below
+                        LIFT / DROP). Bind "." (full stop) in-game.
+                      - Auto tab switching: driving shows STATUS, stopping
+                        brings CONTROLS back for the handbrake, and a
+                        completed delivery jumps to ACTIVE JOB so COMPLETE
+                        is under your thumb. Tapping any tab yourself
+                        suspends it until the next drop. Tunable via
+                        AUTO_TAB_SWITCH / AUTO_TAB_MOVE_SEC /
+                        AUTO_TAB_STOP_SEC.
+                      - Tap-style bars (wipers, axles, susp reset, diff)
+                        now depress when pressed like the square tiles
+                        already did.
+                    FIXED
+                      - Taps could be missed by the game entirely.
+                        pydirectinput.press() fires keyDown and keyUp with
+                        no gap, so the key was down for well under a
+                        millisecond — shorter than one frame at 60fps. A
+                        real finger holds ~100ms. Taps now hold for
+                        TAP_HOLD_SEC (80ms). DIFF LOCK never worked at all
+                        because of this; every other tap button was
+                        intermittent depending on frame timing.
+                      - ACTIVE JOB always read LOADED with an owned
+                        trailer. Cargo state was inferred from whether a
+                        trailer was coupled, which only works for market
+                        trailers (you couple up when you collect). An
+                        owned trailer stays hitched, so it read LOADED
+                        while running empty. Now uses real cargo data
+                        (isCargoLoaded, falling back to cargo mass) and
+                        shows NO TRAILER / EMPTY / LOADED.
+                      - Fuel warning light flicked on and off. When the
+                        consumption model briefly lost its sample window
+                        (a gap in polling while the phone screen slept, a
+                        ferry, a refuel) the range silently fell back to
+                        the game's own estimate — a very different number
+                        — then jumped back, tripping the light either way.
+                        The learned burn rate is now held across short
+                        dropouts and range recomputed from current fuel;
+                        it only falls back to the game figure after 15
+                        minutes with no model.
+                      - DIFF LOCK and HAZARD lights would not stay on.
+                        Both read telemetry fields (differentialLock,
+                        lightsHazards) that this plugin does not report,
+                        so the light was cleared on the next poll. Both
+                        now use telemetry when it is available and
+                        otherwise track their own state.
+                    KNOWN LIMITS
+                      - Because the plugin does not report hazard or diff
+                        state, quitting with either engaged shows it OFF
+                        on restart; one tap resyncs. If a future plugin
+                        reports those fields the buttons switch to the
+                        real state automatically.
+  v3.7          : WIPERS control added to the IGNITION plate as a full
+                    width bar (bind V). Fuel range warning given a
+                    hysteresis dead-band so it stops chattering when
+                    range sits near the route distance. Tab bar given
+                    bigger tap targets. Carrier name removed from the POD
+                    sheet. Fixed PARK BRAKE tile being a different height
+                    to its neighbours when its label wrapped.
+  v3.6          : CAB AXLE lift button added above TRAILER AXLE (bind ",").
+                    HAZARD button changed to a plain latch after /debug
+                    confirmed this plugin never reports hazard state.
+                    Self-updating exe dropped in favour of a notice plus
+                    a browser link to the release, after the download and
+                    file-swap proved unreliable against antivirus.
+  v3.5          : Window controls moved off the numpad onto the
+                    punctuation cluster ([ ] ; ') to stop them clashing
+                    with ReShade and weather mods. GitHub update checking
+                    added: the phone shows a passive notice, the PC window
+                    shows the actionable one.
   v3.4          : HAZARD LIGHTS button added to the IGNITION plate,
                     between START and PARK BRAKE. Bind Numpad / in-game
                     to the hazard warning lights; the button latches
@@ -105,6 +176,7 @@ SETUP (one time)  —  unchanged from v1.0, skip if already running
      Parking brake ......... Numpad +   (bind in-game; panel-owned)
      Hazard lights ......... \\  (backslash)  (bind in-game; panel-owned)
      Cab lift axle ......... ,  (comma)      (bind in-game; panel-owned)
+     Differential lock ..... .  (full stop)  (bind in-game; panel-owned)
      Attach/detach trailer . stays on default T
      Engine start/stop ..... Numpad *   AND REMOVE E from this bind —
                              the panel is now the only ignition switch.
@@ -167,7 +239,20 @@ from flask import Flask, Response, jsonify, request
 # ----------------------------------------------------------------------
 # Version + auto-update check (notify only - never overwrites itself)
 # ----------------------------------------------------------------------
-APP_VERSION = "3.7"          # bump this when you cut a new release
+APP_VERSION = "3.8"          # bump this when you cut a new release
+
+# Auto-switch tabs based on what you're doing: leaves CONTROLS for STATUS once
+# you're moving, and jumps to ACTIVE JOB when a delivery finishes (or you're
+# nearly there). Set False if you'd rather the panel stay wherever you leave it.
+AUTO_TAB_SWITCH = True
+
+# How long each state has to hold before the panel acts on it.
+#   MOVE: short — once you're rolling, STATUS is what you want in front of you.
+#   STOP: how long stopped before CONTROLS comes back up for the handbrake.
+#         At 3s this is quick, but it also means a wait at lights will flip the
+#         page. Raise it (10-15) if that gets annoying on town runs.
+AUTO_TAB_MOVE_SEC = 3
+AUTO_TAB_STOP_SEC = 3
 
 UPDATE_URL   = "https://raw.githubusercontent.com/HexLab2026/RIGDECK/main/version.json"
 RELEASES_URL = "https://github.com/HexLab2026/RIGDECK/releases/latest"
@@ -242,6 +327,7 @@ try:
         "num8": 0x48, "num9": 0x49,
         "numdot": 0x53, "numminus": 0x4A, "numstar": 0x37, "numplus": 0x4E,
         "comma": 0x33,   # cab/tractor lift axle
+        "period": 0x34,  # differential lock
         "numslash": 0xB5,
         # window keys: off the numpad to avoid ReShade (Home) / SnowyMoon clashes
         "lbracket": 0x1A, "rbracket": 0x1B, "semicolon": 0x27, "quote": 0x28,
@@ -306,6 +392,7 @@ FIELDS = {
     # engine state
     "engine":       ["engineEnabled", "engineOn"],              # bool
     "park_brake":   ["parkingBrake", "parkBrake", "parkBrakeOn"],  # bool
+    "diff_lock":    ["differentialLock"],                       # bool
     "hazards":      ["lightsHazards", "hazardWarning"],            # bool
     "wipers":       ["wipers", "wipersOn"],                        # bool
     "blink_l_act":  ["blinkerLeftActive"],    "blink_l_on":  ["blinkerLeftOn"],
@@ -544,11 +631,19 @@ HOLD_KEYS = {"num8", "num2", "num4", "num6", "num0", "numdot",
 PARK_KEY = "numplus"      # parking brake: bind in-game to Numpad +, panel-owned
 HAZ_KEY  = "backslash"    # hazard lights: bind in-game to \\ , panel-owned (numpad-/ was unreliable)
 CABAXLE_KEY = "comma"    # tractor/cab lift axle: bind in-game to , (comma)
-TAP_KEYS = {"t", ENGINE_KEY, "num5", "l", "k", "v", "numminus", PARK_KEY, HAZ_KEY, CABAXLE_KEY}
+DIFF_KEY    = "period"   # differential lock: bind in-game to . (full stop)
+TAP_KEYS = {"t", ENGINE_KEY, "num5", "l", "k", "v", "numminus", PARK_KEY, HAZ_KEY,
+            CABAXLE_KEY, DIFF_KEY}
 
 _held = {}                     # key -> last refresh time
 _held_lock = threading.Lock()
 WATCHDOG_STALE = 3.0           # seconds without refresh -> force release
+# How long a "tap" holds the key down. pydirectinput's press() sends keyDown and
+# keyUp back to back, which can be over in well under a millisecond — short
+# enough that a game polling input once per frame (~16ms) never sees it. A real
+# finger holds a key for ~100ms. This gives taps a few frames of contact so they
+# register reliably.
+TAP_HOLD_SEC = 0.08
 
 
 def _key_down(key):
@@ -887,13 +982,16 @@ def tap():
         key = HAZ_KEY
     elif key == "cabaxle":
         key = CABAXLE_KEY
+    elif key == "diff":
+        key = DIFF_KEY
     if key not in TAP_KEYS:
         return jsonify(ok=False), 400
     if INPUT_OK:
-        try:
-            pydirectinput.press(key)
-        except Exception:
-            pass
+        # hold briefly rather than pydirectinput.press(), which can be too fast
+        # for the game to notice — see TAP_HOLD_SEC above
+        _key_down(key)
+        time.sleep(TAP_HOLD_SEC)
+        _key_up(key)
     return jsonify(ok=True)
 
 
@@ -1061,6 +1159,7 @@ def telemetry():
         paused=bool(getf(data, "paused")),
         engine=bool(getf(data, "engine")),
         park=bool(getf(data, "park_brake")),
+        diff=getf(data, "diff_lock"),
         wipers=bool(getf(data, "wipers")),
         haz=bool(getf(data, "hazards"))
             or (
@@ -1465,6 +1564,10 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
       <div class="sw" id="axlelift"><div class="well"><div class="cap">TRAILER AXLE<small id="axlelbl">TAP</small></div></div></div>
     </div>
     <div class="plate"><span class="tick tl"></span><span class="tick br"></span>
+      <p class="pt">DIFF LOCK</p>
+      <div class="sw" id="difflock"><div class="well"><div class="cap">DIFF LOCK<small id="difflbl">TAP</small></div></div></div>
+    </div>
+    <div class="plate"><span class="tick tl"></span><span class="tick br"></span>
       <p class="pt">SUSPENSION</p>
       <p class="sub">FRONT</p>
       <div class="row2">
@@ -1556,6 +1659,7 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
       <div class="grid" style="margin-top:0">
         <div class="cell"><div class="l">AIR PRESSURE</div><div class="v" id="rair">--</div></div>
         <div class="cell"><div class="l">BRAKE TEMP</div><div class="v" id="rbrk">--</div></div>
+
       </div>
     </div>
     <div class="plate"><span class="tick tl"></span><span class="tick br"></span>
@@ -1601,6 +1705,7 @@ document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
   document.querySelectorAll(".page").forEach(x=>x.classList.remove("on"));
   t.classList.add("on");$("p-"+t.dataset.p).classList.add("on");
   if(t.dataset.p==="jobs")loadJobs();
+  if(!_autoNav){ _autoOnStatus=false; _manualHold=true; }   // your tap wins until the next drop
 }));
 
 /* hold switches */
@@ -1633,6 +1738,8 @@ document.querySelectorAll(".sw[data-key]").forEach(sw=>{
 
 /* engine start */
 let _fcState=null;   // fuel-reachability hysteresis state: null|"ok"|"warn"|"crit"
+let _moveSince=null, _stopSince=null, _autoOnStatus=false;
+let _manualHold=false, _wasPending=false;
 let engineOn=false;
 const startEl=$("engstart");
 function drawPD(){
@@ -1646,6 +1753,15 @@ function drawPark(){parkEl.classList.toggle("on",parkOn);
   $("parklbl").textContent=parkOn?"BRAKE SET":"PARK BRAKE";}
 parkEl.addEventListener("click",()=>{parkOn=!parkOn;post("/tap",{key:"park"});
   navigator.vibrate&&navigator.vibrate(25);drawPark();});
+let diffOn=false;
+const dflEl=$("difflock");
+function drawDiff(){dflEl.classList.toggle("lit",diffOn);
+  $("difflbl").textContent=diffOn?"ENGAGED":"OFF";}
+dflEl.addEventListener("click",()=>{
+  diffOn=!diffOn;post("/tap",{key:"diff"});
+  dflEl.classList.add("fired");setTimeout(()=>dflEl.classList.remove("fired"),300);
+  navigator.vibrate&&navigator.vibrate(25);drawDiff();});
+
 let hazOn=false;
 const hazEl=$("haz");
 function drawHaz(){hazEl.classList.toggle("on",hazOn);
@@ -1703,6 +1819,13 @@ const left=m=>{if(m==null)return"--";const late=m<0;m=Math.abs(m);
 
 /* telemetry poll */
 let _updChecked=false;
+const AUTO_TAB = __AUTOTAB__;
+const AUTO_MOVE_MS = __AUTOMOVEMS__, AUTO_STOP_MS = __AUTOSTOPMS__;
+let _autoNav=false;
+function goTab(p){
+  const t=document.querySelector('.tab[data-p="'+p+'"]');
+  if(t && !t.classList.contains("on")){ _autoNav=true; t.click(); _autoNav=false; }
+}
 async function checkUpdate(){
   try{
     const r=await fetch("/update");const u=await r.json();
@@ -1718,7 +1841,9 @@ async function poll(){
     const r=await fetch("/telemetry");const d=await r.json();
     const dot=$("dot");
     if(!d.game){dot.className="dot wait";$("lt").textContent="GAME";
-      engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();$("wipers").classList.remove("lit");$("wiperlbl").textContent="TAP";fuelChime(false);rangeAlert(false);drawPD();return;}
+      engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();$("wipers").classList.remove("lit");$("wiperlbl").textContent="TAP";diffOn=false;drawDiff();fuelChime(false);rangeAlert(false);drawPD();
+      _moveSince=null;_stopSince=null;_autoOnStatus=false;_manualHold=false;_wasPending=false;
+      return;}
     dot.className="dot ok";$("lt").textContent="LINK";
     engineOn=!!d.engine;
     parkOn=!!d.park;drawPark();
@@ -1744,11 +1869,41 @@ async function poll(){
     hb.classList.toggle("on",!!L.high);
     $("highlbl").textContent=L.high?"ON":"OFF";
 
+    /* If the plugin reports differentialLock, that's authoritative — the light
+       then follows the truck even if you toggle it from the keyboard. If it
+       doesn't report it (some builds don't, same as hazards), fall back to the
+       button remembering its own state so it still stays lit while engaged. */
+    if(d.diff!=null) diffOn=!!d.diff;
+    drawDiff();
+
     /* trailer lift axle */
     const axl=$("axlelift");
     if(d.axle==null){axl.classList.remove("lit");$("axlelbl").textContent="TAP";}
     else{axl.classList.toggle("lit",d.axle);
       $("axlelbl").textContent=d.axle?"LIFTED":"DOWN";}
+
+    /* auto tab switching. The cycle:
+         drop the load  -> ACTIVE JOB (so COMPLETE is right there)
+         drive away     -> STATUS after a few seconds of sustained movement
+         stop           -> back to CONTROLS
+       Tapping any tab yourself suspends all of this until the next drop, so
+       the panel never yanks a page away while you're reading it. Movement is
+       debounced so idling at lights or shunting round a yard doesn't flip it. */
+    if(AUTO_TAB){
+      const now=performance.now(), speed=d.speed_kmh||0, cur=document.querySelector(".tab.on").dataset.p;
+
+      /* the drop: job finished and waiting to be signed off. Also clears any
+         manual hold, so the cycle picks up again for the next run. */
+      if(d.pending && !_wasPending){ goTab("job"); _manualHold=false; _autoOnStatus=false; }
+      _wasPending=!!d.pending;
+
+      if(!_manualHold){
+        if(speed>5){ if(_moveSince==null)_moveSince=now; }else{ _moveSince=null; }
+        if(speed<2){ if(_stopSince==null)_stopSince=now; }else{ _stopSince=null; }
+        if(_moveSince!=null && now-_moveSince>AUTO_MOVE_MS && cur!=="status"){ goTab("status"); _autoOnStatus=true; }
+        if(_stopSince!=null && now-_stopSince>AUTO_STOP_MS && cur==="status" && _autoOnStatus){ goTab("controls"); _autoOnStatus=false; }
+      }
+    }
 
     /* rig page */
     const g=d.rig||{};
@@ -1951,7 +2106,10 @@ setInterval(loadJobs,8000);loadJobs();
 
 @app.route("/")
 def index():
-    return Response(PAGE, mimetype="text/html")
+    out = (PAGE.replace("__AUTOTAB__", "true" if AUTO_TAB_SWITCH else "false")
+               .replace("__AUTOMOVEMS__", str(int(AUTO_TAB_MOVE_SEC * 1000)))
+               .replace("__AUTOSTOPMS__", str(int(AUTO_TAB_STOP_SEC * 1000))))
+    return Response(out, mimetype="text/html")
 
 
 # ----------------------------------------------------------------------
