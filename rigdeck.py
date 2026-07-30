@@ -94,7 +94,11 @@
                         detected from cargo entering/leaving the trailer
                         in telemetry, so the cycle resumes every run, and
                         a bounded AUTO_TAB_HOLD_SEC backstop means a
-                        pause can never last indefinitely.
+                        pause can never last indefinitely. The ignition
+                        and handbrake also lift a pause, which covers the
+                        stops that aren't a job event — refuelling,
+                        ferries, rest stops — so STATUS comes back once
+                        you're rolling again.
                     KNOWN LIMITS
                       - Because the plugin does not report hazard or diff
                         state, quitting with either engaged shows it OFF
@@ -1754,6 +1758,7 @@ document.querySelectorAll(".sw[data-key]").forEach(sw=>{
 let _fcState=null;   // fuel-reachability hysteresis state: null|"ok"|"warn"|"crit"
 let _moveSince=null, _stopSince=null, _autoOnStatus=false;
 let _holdUntil=0, _wasPending=false, _wasLoaded=false;
+let _wasEng=null, _wasPk=null;
 let engineOn=false;
 const startEl=$("engstart");
 function drawPD(){
@@ -1857,7 +1862,7 @@ async function poll(){
     const dot=$("dot");
     if(!d.game){dot.className="dot wait";$("lt").textContent="GAME";
       engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();$("wipers").classList.remove("lit");$("wiperlbl").textContent="TAP";diffOn=false;drawDiff();fuelChime(false);rangeAlert(false);drawPD();
-      _moveSince=null;_stopSince=null;_autoOnStatus=false;_holdUntil=0;_wasPending=false;_wasLoaded=false;
+      _moveSince=null;_stopSince=null;_autoOnStatus=false;_holdUntil=0;_wasPending=false;_wasLoaded=false;_wasEng=null;_wasPk=null;
       return;}
     dot.className="dot ok";$("lt").textContent="LINK";
     engineOn=!!d.engine;
@@ -1919,6 +1924,16 @@ async function poll(){
       if(delivered || collected){ _holdUntil=0; _autoOnStatus=false; }   // resume the cycle
       if(delivered) goTab("job");
       _wasPending=!!d.pending; _wasLoaded=loaded;
+
+      /* Also treat the ignition and handbrake as "something deliberate just
+         happened here" and lift any pause. Covers the stops that aren't a
+         delivery or collection — refuelling, ferries, rest stops — where you'd
+         otherwise drive off and never get STATUS back. Only the pause is
+         cleared, not _autoOnStatus, so the return-to-CONTROLS behaviour on
+         stopping is left alone. */
+      const eng=!!d.engine, pk=!!d.park;
+      if((_wasEng!==null && eng!==_wasEng) || (_wasPk!==null && pk!==_wasPk)) _holdUntil=0;
+      _wasEng=eng; _wasPk=pk;
 
       if(now >= _holdUntil){
         if(speed>5){ if(_moveSince==null)_moveSince=now; }else{ _moveSince=null; }

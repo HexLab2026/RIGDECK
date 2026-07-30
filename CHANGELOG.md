@@ -40,6 +40,16 @@
   report, so the light was cleared on the next poll. Both now use telemetry when
   it's available and otherwise track their own state.
 
+- **Auto tab switching stopped for the rest of the session** if you changed tab
+  once. The pause was only lifted on the `pending` edge, and `pending` only
+  clears when the JOB COMPLETED button is pressed — skip that press and the edge
+  never fired again. Delivery and collection are now detected from cargo entering
+  and leaving the trailer in telemetry, so the cycle resumes on every run, and a
+  bounded `AUTO_TAB_HOLD_SEC` backstop means a pause can never last indefinitely.
+  Changing the ignition or handbrake also lifts a pause, which covers the stops
+  that aren't a job event — refuelling, ferries, rest stops — so STATUS comes back
+  once you're moving again.
+
 ### Known limitations
 - Because the plugin doesn't report hazard or diff-lock state, quitting with
   either engaged shows it OFF on restart — one tap resyncs. If a future plugin
