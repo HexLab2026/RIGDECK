@@ -93,12 +93,19 @@
                         fired again. Delivery and collection are now
                         detected from cargo entering/leaving the trailer
                         in telemetry, so the cycle resumes every run, and
-                        a bounded AUTO_TAB_HOLD_SEC backstop means a
-                        pause can never last indefinitely. The ignition
-                        and handbrake also lift a pause, which covers the
-                        stops that aren't a job event — refuelling,
-                        ferries, rest stops — so STATUS comes back once
-                        you're rolling again.
+                        and the whole cycle was reworked: coming to a
+                        full stop now brings CONTROLS up immediately so
+                        the handbrake is under your thumb, pulling away
+                        returns to STATUS, and both are edge-triggered so
+                        shunting round a yard doesn't make the page
+                        chatter. Tapping a tab yourself suspends only the
+                        flip to STATUS — that lifts after
+                        AUTO_TAB_RESUME_SEC of unbroken movement if you
+                        tapped while driving, or when the engine is
+                        restarted if you tapped with it off (fuel stops,
+                        ferries, rest stops). A collection or delivery
+                        lifts it either way. Timings are all configurable:
+                        AUTO_TAB_STOP_SEC / MOVE_SEC / RESUME_SEC.
                     KNOWN LIMITS
                       - Because the plugin does not report hazard or diff
                         state, quitting with either engaged shows it OFF
@@ -265,12 +272,20 @@ AUTO_TAB_SWITCH = True
 #   STOP: how long stopped before CONTROLS comes back up for the handbrake.
 #         At 3s this is quick, but it also means a wait at lights will flip the
 #         page. Raise it (10-15) if that gets annoying on town runs.
-AUTO_TAB_MOVE_SEC = 3
-AUTO_TAB_STOP_SEC = 3
-# Backstop only. Tapping a tab yourself pauses the auto-switching, and that
-# pause normally ends at the next collection or delivery. This is just a
-# ceiling so it can never stay paused indefinitely if neither happens.
-AUTO_TAB_HOLD_SEC = 300
+# Coming to a full stop always brings CONTROLS up (handbrake under your thumb),
+# then pulling away goes back to STATUS. 0 = the instant you're stopped.
+AUTO_TAB_STOP_SEC = 0
+AUTO_TAB_MOVE_SEC = 2
+
+# Tapping a tab yourself suspends the flip to STATUS so the panel doesn't pull a
+# page away while you're reading it. How that suspension ends depends on what
+# you were doing when you tapped:
+#   - tapped while driving  -> lifts after this many seconds of continuous
+#                              movement with nothing else touched
+#   - tapped with the engine off -> stays put indefinitely, and only resumes
+#                              when the engine is started again
+# A collection or delivery also lifts it either way.
+AUTO_TAB_RESUME_SEC = 10
 
 UPDATE_URL   = "https://raw.githubusercontent.com/HexLab2026/RIGDECK/main/version.json"
 RELEASES_URL = "https://github.com/HexLab2026/RIGDECK/releases/latest"
@@ -1723,7 +1738,7 @@ document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
   document.querySelectorAll(".page").forEach(x=>x.classList.remove("on"));
   t.classList.add("on");$("p-"+t.dataset.p).classList.add("on");
   if(t.dataset.p==="jobs")loadJobs();
-  if(!_autoNav){ _autoOnStatus=false; _holdUntil=performance.now()+AUTO_HOLD_MS; }
+  if(!_autoNav){ _autoOnStatus=false; _holdActive=true; _holdMoveSince=null; }
 }));
 
 /* hold switches */
@@ -1757,8 +1772,9 @@ document.querySelectorAll(".sw[data-key]").forEach(sw=>{
 /* engine start */
 let _fcState=null;   // fuel-reachability hysteresis state: null|"ok"|"warn"|"crit"
 let _moveSince=null, _stopSince=null, _autoOnStatus=false;
-let _holdUntil=0, _wasPending=false, _wasLoaded=false;
-let _wasEng=null, _wasPk=null;
+let _holdActive=false, _holdMoveSince=null, _wasPending=false, _wasLoaded=false;
+let _wasEng=null;
+let _stopFired=false, _moveFired=false;
 let engineOn=false;
 const startEl=$("engstart");
 function drawPD(){
@@ -1840,7 +1856,7 @@ const left=m=>{if(m==null)return"--";const late=m<0;m=Math.abs(m);
 let _updChecked=false;
 const AUTO_TAB = __AUTOTAB__;
 const AUTO_MOVE_MS = __AUTOMOVEMS__, AUTO_STOP_MS = __AUTOSTOPMS__;
-const AUTO_HOLD_MS = __AUTOHOLDMS__;
+const AUTO_RESUME_MS = __AUTORESUMEMS__;
 let _autoNav=false;
 function goTab(p){
   const t=document.querySelector('.tab[data-p="'+p+'"]');
@@ -1862,7 +1878,7 @@ async function poll(){
     const dot=$("dot");
     if(!d.game){dot.className="dot wait";$("lt").textContent="GAME";
       engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();$("wipers").classList.remove("lit");$("wiperlbl").textContent="TAP";diffOn=false;drawDiff();fuelChime(false);rangeAlert(false);drawPD();
-      _moveSince=null;_stopSince=null;_autoOnStatus=false;_holdUntil=0;_wasPending=false;_wasLoaded=false;_wasEng=null;_wasPk=null;
+      _moveSince=null;_stopSince=null;_autoOnStatus=false;_holdActive=false;_holdMoveSince=null;_wasPending=false;_wasLoaded=false;_wasEng=null;_stopFired=false;_moveFired=false;
       return;}
     dot.className="dot ok";$("lt").textContent="LINK";
     engineOn=!!d.engine;
@@ -1902,44 +1918,67 @@ async function poll(){
     else{axl.classList.toggle("lit",d.axle);
       $("axlelbl").textContent=d.axle?"LIFTED":"DOWN";}
 
-    /* auto tab switching. The cycle:
-         drop the load  -> ACTIVE JOB (so COMPLETE is right there)
-         drive away     -> STATUS after a few seconds of sustained movement
-         stop           -> back to CONTROLS
-       Tapping a tab yourself pauses all of it so the panel never yanks a page
-       away while you're reading. That pause ends at the next collection or
-       delivery, so the cycle restarts every run.
+    /* Auto tab switching.
 
-       Delivery is detected from cargo LEAVING the trailer, not from the
-       COMPLETE button: pending only clears when that button is pressed, so
-       relying on it meant one skipped press left auto-switching paused for the
-       rest of the session. Cargo state comes straight from telemetry, so it
-       follows what the truck is actually doing. */
+         come to a full stop -> CONTROLS straight away, so the handbrake is
+                                already under your thumb. Always fires.
+         pull away (2s)      -> STATUS
+         delivery            -> ACTIVE JOB, with COMPLETE ready
+
+       Both are edge-triggered — once per stop, once per pull-away — so shunting
+       round a yard doesn't make the page chatter. The 2-5 km/h band is a
+       deliberate dead zone: under 2 counts as stopped, over 5 as moving, and
+       crawling between the two changes nothing.
+
+       Tapping a tab yourself suspends only the flip TO STATUS. How that ends
+       depends on what you were doing:
+         tapped while driving      -> lifts after AUTO_TAB_RESUME_SEC of
+                                      continuous movement, nothing else touched
+         tapped with engine off    -> stays put; only starting the engine
+                                      resumes normal behaviour
+       A collection or delivery lifts it either way. */
     if(AUTO_TAB){
       const now=performance.now(), speed=d.speed_kmh||0, cur=document.querySelector(".tab.on").dataset.p;
+      const moving = speed>5, stopped = speed<2;
       const loaded = !!(d.job && d.job.loaded===true);
 
+      if(moving){ if(_moveSince==null)_moveSince=now; _stopFired=false; } else { _moveSince=null; }
+      if(stopped){ if(_stopSince==null)_stopSince=now; _moveFired=false; } else { _stopSince=null; }
+
+      /* a collection or delivery means you're done here — resume either way */
       const delivered = (d.pending && !_wasPending) || (_wasLoaded && !loaded);
       const collected = (!_wasLoaded && loaded);
-      if(delivered || collected){ _holdUntil=0; _autoOnStatus=false; }   // resume the cycle
+      if(delivered || collected){ _holdActive=false; _holdMoveSince=null; _autoOnStatus=false; }
       if(delivered) goTab("job");
       _wasPending=!!d.pending; _wasLoaded=loaded;
 
-      /* Also treat the ignition and handbrake as "something deliberate just
-         happened here" and lift any pause. Covers the stops that aren't a
-         delivery or collection — refuelling, ferries, rest stops — where you'd
-         otherwise drive off and never get STATUS back. Only the pause is
-         cleared, not _autoOnStatus, so the return-to-CONTROLS behaviour on
-         stopping is left alone. */
-      const eng=!!d.engine, pk=!!d.park;
-      if((_wasEng!==null && eng!==_wasEng) || (_wasPk!==null && pk!==_wasPk)) _holdUntil=0;
-      _wasEng=eng; _wasPk=pk;
+      /* engine started -> back to normal. This is what releases a tab you
+         parked on with the engine off (fuel, ferry, rest stop). */
+      const eng=!!d.engine;
+      if(_wasEng===false && eng){ _holdActive=false; _holdMoveSince=null; }
+      _wasEng=eng;
 
-      if(now >= _holdUntil){
-        if(speed>5){ if(_moveSince==null)_moveSince=now; }else{ _moveSince=null; }
-        if(speed<2){ if(_stopSince==null)_stopSince=now; }else{ _stopSince=null; }
-        if(_moveSince!=null && now-_moveSince>AUTO_MOVE_MS && cur!=="status"){ goTab("status"); _autoOnStatus=true; }
-        if(_stopSince!=null && now-_stopSince>AUTO_STOP_MS && cur==="status" && _autoOnStatus){ goTab("controls"); _autoOnStatus=false; }
+      /* tapped while driving: needs AUTO_TAB_RESUME_SEC of unbroken movement.
+         Stopping resets the clock, so it's genuinely "still rolling, untouched". */
+      if(_holdActive){
+        if(moving){
+          if(_holdMoveSince==null) _holdMoveSince=now;
+          if(now-_holdMoveSince>=AUTO_RESUME_MS){
+            _holdActive=false; _holdMoveSince=null;
+            _moveFired=false;   // re-arm so it actually flips to STATUS now
+          }
+        }else{
+          _holdMoveSince=null;
+        }
+      }
+
+      /* full stop -> CONTROLS. Fires regardless of a manual suspension. */
+      if(_stopSince!=null && now-_stopSince>=AUTO_STOP_MS && !_stopFired){
+        _stopFired=true; _autoOnStatus=false; goTab("controls");
+      }
+      /* pulling away -> STATUS. Held off while a suspension is active. */
+      if(_moveSince!=null && now-_moveSince>=AUTO_MOVE_MS && !_moveFired && !_holdActive){
+        _moveFired=true; _autoOnStatus=true; goTab("status");
       }
     }
 
@@ -2147,7 +2186,7 @@ def index():
     out = (PAGE.replace("__AUTOTAB__", "true" if AUTO_TAB_SWITCH else "false")
                .replace("__AUTOMOVEMS__", str(int(AUTO_TAB_MOVE_SEC * 1000)))
                .replace("__AUTOSTOPMS__", str(int(AUTO_TAB_STOP_SEC * 1000)))
-               .replace("__AUTOHOLDMS__", str(int(AUTO_TAB_HOLD_SEC * 1000))))
+               .replace("__AUTORESUMEMS__", str(int(AUTO_TAB_RESUME_SEC * 1000))))
     return Response(out, mimetype="text/html")
 
 

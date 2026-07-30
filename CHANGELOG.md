@@ -45,10 +45,15 @@
   clears when the JOB COMPLETED button is pressed — skip that press and the edge
   never fired again. Delivery and collection are now detected from cargo entering
   and leaving the trailer in telemetry, so the cycle resumes on every run, and a
-  bounded `AUTO_TAB_HOLD_SEC` backstop means a pause can never last indefinitely.
-  Changing the ignition or handbrake also lifts a pause, which covers the stops
-  that aren't a job event — refuelling, ferries, rest stops — so STATUS comes back
-  once you're moving again.
+  and the cycle was reworked around what the truck is doing: coming to a full stop
+  brings CONTROLS up immediately so the handbrake is under your thumb, pulling away
+  returns to STATUS, and both are edge-triggered so shunting round a yard doesn't
+  make the page chatter. Tapping a tab yourself suspends only the flip to STATUS —
+  that lifts after `AUTO_TAB_RESUME_SEC` of unbroken movement if you tapped while
+  driving, or when the engine is restarted if you tapped with it off (covers fuel
+  stops, ferries and rest stops). A collection or delivery lifts it either way.
+  All timings configurable: `AUTO_TAB_STOP_SEC`, `AUTO_TAB_MOVE_SEC`,
+  `AUTO_TAB_RESUME_SEC`.
 
 ### Known limitations
 - Because the plugin doesn't report hazard or diff-lock state, quitting with
