@@ -31,7 +31,6 @@ finds your PC automatically.
 ### 🎛️ CONTROLS
 - **Ignition** — hidden engine start/stop. The panel is the only thing that can start the truck.
 - **Lights** — headlight modes and high beam.
-- **Wipers** - Glows red when active
 - **Left & right windows** — hold to open, hold to close, each side independent.
 - **Parking brake** — latching button that mirrors the truck's real brake state.
 - **Hazard lights** — flashes red on the panel while they're active.
@@ -116,6 +115,8 @@ RigDeck checks this repo on startup and every few hours. When a newer version is
   the notice just points you there.)
 
 *(For maintainers: publish a release and bump `version.json` — see [`BUILD.md`](BUILD.md).)*
+
+Full version history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ---
 
