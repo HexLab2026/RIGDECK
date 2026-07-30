@@ -85,6 +85,16 @@
                         so the light was cleared on the next poll. Both
                         now use telemetry when it is available and
                         otherwise track their own state.
+                      - Auto tab switching stopped for the rest of the
+                        session if you changed tab once. The pause was
+                        only lifted on the "pending" edge, and pending
+                        only clears when the JOB COMPLETED button is
+                        pressed — skip that press and the edge never
+                        fired again. Delivery and collection are now
+                        detected from cargo entering/leaving the trailer
+                        in telemetry, so the cycle resumes every run, and
+                        a bounded AUTO_TAB_HOLD_SEC backstop means a
+                        pause can never last indefinitely.
                     KNOWN LIMITS
                       - Because the plugin does not report hazard or diff
                         state, quitting with either engaged shows it OFF
@@ -253,6 +263,10 @@ AUTO_TAB_SWITCH = True
 #         page. Raise it (10-15) if that gets annoying on town runs.
 AUTO_TAB_MOVE_SEC = 3
 AUTO_TAB_STOP_SEC = 3
+# Backstop only. Tapping a tab yourself pauses the auto-switching, and that
+# pause normally ends at the next collection or delivery. This is just a
+# ceiling so it can never stay paused indefinitely if neither happens.
+AUTO_TAB_HOLD_SEC = 300
 
 UPDATE_URL   = "https://raw.githubusercontent.com/HexLab2026/RIGDECK/main/version.json"
 RELEASES_URL = "https://github.com/HexLab2026/RIGDECK/releases/latest"
@@ -1705,7 +1719,7 @@ document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
   document.querySelectorAll(".page").forEach(x=>x.classList.remove("on"));
   t.classList.add("on");$("p-"+t.dataset.p).classList.add("on");
   if(t.dataset.p==="jobs")loadJobs();
-  if(!_autoNav){ _autoOnStatus=false; _manualHold=true; }   // your tap wins until the next drop
+  if(!_autoNav){ _autoOnStatus=false; _holdUntil=performance.now()+AUTO_HOLD_MS; }
 }));
 
 /* hold switches */
@@ -1739,7 +1753,7 @@ document.querySelectorAll(".sw[data-key]").forEach(sw=>{
 /* engine start */
 let _fcState=null;   // fuel-reachability hysteresis state: null|"ok"|"warn"|"crit"
 let _moveSince=null, _stopSince=null, _autoOnStatus=false;
-let _manualHold=false, _wasPending=false;
+let _holdUntil=0, _wasPending=false, _wasLoaded=false;
 let engineOn=false;
 const startEl=$("engstart");
 function drawPD(){
@@ -1821,6 +1835,7 @@ const left=m=>{if(m==null)return"--";const late=m<0;m=Math.abs(m);
 let _updChecked=false;
 const AUTO_TAB = __AUTOTAB__;
 const AUTO_MOVE_MS = __AUTOMOVEMS__, AUTO_STOP_MS = __AUTOSTOPMS__;
+const AUTO_HOLD_MS = __AUTOHOLDMS__;
 let _autoNav=false;
 function goTab(p){
   const t=document.querySelector('.tab[data-p="'+p+'"]');
@@ -1842,7 +1857,7 @@ async function poll(){
     const dot=$("dot");
     if(!d.game){dot.className="dot wait";$("lt").textContent="GAME";
       engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();$("wipers").classList.remove("lit");$("wiperlbl").textContent="TAP";diffOn=false;drawDiff();fuelChime(false);rangeAlert(false);drawPD();
-      _moveSince=null;_stopSince=null;_autoOnStatus=false;_manualHold=false;_wasPending=false;
+      _moveSince=null;_stopSince=null;_autoOnStatus=false;_holdUntil=0;_wasPending=false;_wasLoaded=false;
       return;}
     dot.className="dot ok";$("lt").textContent="LINK";
     engineOn=!!d.engine;
@@ -1886,18 +1901,26 @@ async function poll(){
          drop the load  -> ACTIVE JOB (so COMPLETE is right there)
          drive away     -> STATUS after a few seconds of sustained movement
          stop           -> back to CONTROLS
-       Tapping any tab yourself suspends all of this until the next drop, so
-       the panel never yanks a page away while you're reading it. Movement is
-       debounced so idling at lights or shunting round a yard doesn't flip it. */
+       Tapping a tab yourself pauses all of it so the panel never yanks a page
+       away while you're reading. That pause ends at the next collection or
+       delivery, so the cycle restarts every run.
+
+       Delivery is detected from cargo LEAVING the trailer, not from the
+       COMPLETE button: pending only clears when that button is pressed, so
+       relying on it meant one skipped press left auto-switching paused for the
+       rest of the session. Cargo state comes straight from telemetry, so it
+       follows what the truck is actually doing. */
     if(AUTO_TAB){
       const now=performance.now(), speed=d.speed_kmh||0, cur=document.querySelector(".tab.on").dataset.p;
+      const loaded = !!(d.job && d.job.loaded===true);
 
-      /* the drop: job finished and waiting to be signed off. Also clears any
-         manual hold, so the cycle picks up again for the next run. */
-      if(d.pending && !_wasPending){ goTab("job"); _manualHold=false; _autoOnStatus=false; }
-      _wasPending=!!d.pending;
+      const delivered = (d.pending && !_wasPending) || (_wasLoaded && !loaded);
+      const collected = (!_wasLoaded && loaded);
+      if(delivered || collected){ _holdUntil=0; _autoOnStatus=false; }   // resume the cycle
+      if(delivered) goTab("job");
+      _wasPending=!!d.pending; _wasLoaded=loaded;
 
-      if(!_manualHold){
+      if(now >= _holdUntil){
         if(speed>5){ if(_moveSince==null)_moveSince=now; }else{ _moveSince=null; }
         if(speed<2){ if(_stopSince==null)_stopSince=now; }else{ _stopSince=null; }
         if(_moveSince!=null && now-_moveSince>AUTO_MOVE_MS && cur!=="status"){ goTab("status"); _autoOnStatus=true; }
@@ -2108,7 +2131,8 @@ setInterval(loadJobs,8000);loadJobs();
 def index():
     out = (PAGE.replace("__AUTOTAB__", "true" if AUTO_TAB_SWITCH else "false")
                .replace("__AUTOMOVEMS__", str(int(AUTO_TAB_MOVE_SEC * 1000)))
-               .replace("__AUTOSTOPMS__", str(int(AUTO_TAB_STOP_SEC * 1000))))
+               .replace("__AUTOSTOPMS__", str(int(AUTO_TAB_STOP_SEC * 1000)))
+               .replace("__AUTOHOLDMS__", str(int(AUTO_TAB_HOLD_SEC * 1000))))
     return Response(out, mimetype="text/html")
 
 
