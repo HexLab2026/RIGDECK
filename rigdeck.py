@@ -268,10 +268,6 @@ APP_VERSION = "3.8"          # bump this when you cut a new release
 AUTO_TAB_SWITCH = True
 
 # How long each state has to hold before the panel acts on it.
-#   MOVE: short — once you're rolling, STATUS is what you want in front of you.
-#   STOP: how long stopped before CONTROLS comes back up for the handbrake.
-#         At 3s this is quick, but it also means a wait at lights will flip the
-#         page. Raise it (10-15) if that gets annoying on town runs.
 # Coming to a full stop always brings CONTROLS up (handbrake under your thumb),
 # then pulling away goes back to STATUS. 0 = the instant you're stopped.
 AUTO_TAB_STOP_SEC = 0

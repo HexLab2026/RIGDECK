@@ -5,8 +5,9 @@
 ### Your phone becomes the cab.
 
 **A wireless control panel and dashboard for Euro Truck Simulator 2 & American Truck Simulator.**
-Windows, suspension, lights, ignition, parking brake, hazards, live fuel range, job info and
-proof-of-delivery — all on your phone, over Wi-Fi, while you drive.
+Windows, suspension, lights, ignition, parking brake, hazards, wipers, diff lock, live fuel
+range, job info and proof-of-delivery — all on your phone, over Wi-Fi, while you drive. The
+panel even switches itself between pages depending on what you're doing.
 
 *Driven by precision.*
 
@@ -30,35 +31,65 @@ finds your PC automatically.
 
 ### 🎛️ CONTROLS
 - **Ignition** — hidden engine start/stop. The panel is the only thing that can start the truck.
-- **Lights** — headlight modes and high beam.
-- **Left & right windows** — hold to open, hold to close, each side independent.
-- **Parking brake** — latching button that mirrors the truck's real brake state.
-- **Hazard lights** — flashes red on the panel while they're active.
-- **Trailer couple / release** — hold-to-arm so you can't drop a trailer by accident.
-- **Trailer axle lift / drop.**
-- **Air suspension** — front, rear, trailer and a level reset.
+- **Hazard lights** — latches on/off, flashes red round the edge while active.
+- **Parking brake.**
+- **Wipers.**
+- **Lights** — headlight modes and high beam, each showing live on/off state.
+- **Left & right windows** — hold to open, hold to close, independent per side.
+- **Trailer couple / release** — hold for 0.6s to arm, so you can't drop a trailer by accident.
+- **Cab & trailer lift axles.**
+- **Differential lock.**
+- **Air suspension** — front, rear, trailer, plus a level reset.
+
+A couple of these (hazards, diff lock) read their state from the game when your telemetry
+plugin reports it, and fall back to the button remembering its own state when it doesn't —
+either way the light matches what you last told it to do.
+
+### 🔄 The panel switches itself
+RigDeck watches what the truck is doing and moves to the page you actually need, without you
+reaching for it:
+
+- **Come to a full stop** → jumps straight to **CONTROLS**, so the handbrake is right there.
+- **Pull away** → after a couple of seconds of moving, back to **STATUS** for the drive.
+- **Delivery completes** → straight to **ACTIVE JOB**, with the COMPLETE button ready.
+
+Tap any tab yourself and the panel leaves you exactly where you put it — it won't fight you
+mid-read. That pause lifts on its own once you're genuinely back on the road: after a few
+seconds of continuous driving, or the moment you restart the engine if you'd parked up with it
+off (covers fuel stops, ferries, rest breaks). A collection or delivery clears it either way, so
+the cycle is always ready to go again next run.
+
+Not for you? It's a single flag near the top of the script (`AUTO_TAB_SWITCH = True`) — flip it
+off and the panel stays wherever you leave it, like it used to.
 
 ### 🚚 ACTIVE JOB
 - Live route distance and ETA.
-- Delivery countdown with a late warning.
-- Cargo, source and destination.
-- **Proof of delivery** — sign off a completed job on the phone.
+- Cargo status at a glance — **NO TRAILER**, **EMPTY**, or **LOADED**, worked out from the
+  truck's actual cargo data rather than just whether a trailer's hitched (an owned trailer
+  stays hitched permanently, so that alone can't tell you if it's running empty).
+- **Proof of delivery** once a job's done — driver and warehouse signatures, sign off on the
+  phone.
 
 ### 📊 STATUS
-- Fuel level and a **self-learning fuel range** — RigDeck watches your real consumption and
-  works out how far you can actually go, not the game's rough guess.
-- AdBlue, air pressure, brake temp, oil, water, battery.
-- Component wear.
+- Time to your next rest stop, route distance, odometer, resettable trip meter.
+- **Self-learned fuel range.** RigDeck watches your actual burn rate over the last ~40km and
+  works out how far you can really go — not the game's rough built-in guess. A small **•**
+  next to the range figure means that learned number is live.
+- A **fuel warning light** that goes red when your range won't cover the remaining route, amber
+  when it's tight, green when you're fine — with enough hysteresis built in that it holds
+  steady instead of flickering when your range sits right on the edge.
+- AdBlue, air pressure, brake temperature, oil, water, battery.
+- Wear on every major component — engine, transmission, cabin, chassis, wheels.
 
 ### 📋 JOBS
-- A running log of every delivery with times, distance and pay.
-- Add notes to any job.
+- A running log of every delivery — distance, time, pay.
+- Notes on any job.
 
 ### 🔔 Extras
 - Low-fuel and out-of-range chimes.
 - Auto-discovery — the phone finds the PC by itself.
 - Works fullscreen as a phone web-app (add to home screen).
-- **Auto update check** — tells you when a new version is out.
+- **Update notifications** — see [Updates](#-updates) below.
 
 ---
 
@@ -71,6 +102,9 @@ finds your PC automatically.
    which finds the PC automatically.
 4. Add it to your home screen for a fullscreen, app-like panel.
 
+**If it won't start** with a "Failed to load Python DLL" error, that's antivirus — see the
+troubleshooting note in [`BUILD.md`](BUILD.md).
+
 ### Build it yourself
 See [`BUILD.md`](BUILD.md) — one double-click on Windows and it compiles the exe for you.
 
@@ -78,41 +112,52 @@ See [`BUILD.md`](BUILD.md) — one double-click on Windows and it compiles the e
 
 ## 🎮 One-time game setup
 
-RigDeck sends its controls on **numpad and punctuation keys** so they never clash with your
-normal driving keys. A few of them you bind once in-game (Options → Keys):
+RigDeck sends its controls on keys chosen so they never clash with your normal driving keys or
+common mods (ReShade, weather/season mods). A handful you bind once in-game
+(Options → Key/Button Assignments):
 
 | Control | Bind in-game to | Why |
 |---|---|---|
 | Engine start/stop | **Numpad ✳** (and remove `E`) | Makes the panel the only ignition |
 | Parking brake | **Numpad ➕** | Panel-owned, no keyboard clash |
-| Hazard lights | **Numpad ➗** | Panel-owned |
+| Hazard lights | **\\** (backslash) | Panel-owned |
+| Cab lift axle | **,** (comma) | Panel-owned |
+| Differential lock | **.** (full stop) | Panel-owned |
 
-Everything else (windows, suspension, lights, trailer) uses keys RigDeck already sends —
-the panel lists them on first run. Window controls sit on the `[ ] ; '` keys specifically so
-they don't fight with ReShade or weather/season mods.
+Everything else already uses keys RigDeck registers for itself — windows on `[` `]` `;` `'`,
+suspension and trailer axle on the numpad, wipers/lights/couple-release on their normal
+defaults (`V` / `L` `K` / `T`). The panel lists the full set on startup if you ever need to
+check.
 
 You'll also need the telemetry plugin (the SCS SDK plugin) in your game's `plugins` folder —
-this is what lets RigDeck read the truck's data. RigDeck tells you if it's missing.
+this is what lets RigDeck read the truck's data. RigDeck tells you if it's missing, via `/debug`.
 
 ---
 
 ## 📱 The Android app
 
-The companion app: a fullscreen wrapper that auto-discovers your PC
-so you never type an address. sideload the APK from Releases.
+The `android/` folder has the companion app: a fullscreen wrapper that auto-discovers your PC
+so you never type an address. Build it in Android Studio, or sideload the APK from Releases.
+
+It's a thin WebView shell — the actual panel lives on the PC and is served fresh each time, so
+you only need to rebuild the Android app if you're changing the wrapper itself (icon, fullscreen
+behaviour, discovery). Ordinary panel updates just need the PC exe rebuilt; reload the page on
+the phone (or fully close and reopen it) to pick them up.
 
 ---
 
 ## 🔄 Updates
 
-RigDeck checks this repo on startup and every few hours. When a newer version is out:
+RigDeck checks this repo on startup and every few hours. It never downloads or replaces
+anything on its own — self-updating exes turned out to be unreliable against antivirus, so this
+is deliberately hands-off:
 
-- **On the PC** — the RigDeck window shows **UPDATE AVAILABLE** with an **Update Now** button.
-  Click it and RigDeck downloads the new version, swaps itself out and restarts. Nothing happens
-  until you click.
-- **On the phone** — a small notice appears saying a new version is ready and to install it from
-  the RigDeck window on your PC. (The phone can't update the app — RigDeck lives on the PC — so
-  the notice just points you there.)
+- **On the PC** — the RigDeck window shows **UPDATE AVAILABLE — vX** with an **Open Download
+  Page** button. Click it, download the new `RigDeck.exe` from the release, and replace the old
+  one yourself.
+- **On the phone** — a small notice tells you a new version's ready and to grab it from the
+  RigDeck window on your PC. It's informational only; the phone can't install anything, since
+  RigDeck itself lives on the PC.
 
 *(For maintainers: publish a release and bump `version.json` — see [`BUILD.md`](BUILD.md).)*
 
@@ -129,15 +174,21 @@ you're playing.
 
 **Can it show the sat-nav map?**
 No — the game's telemetry sends distances and times but not the map itself, so RigDeck shows
-route info as numbers (ETA, distance, time to rest), not a moving map.
+route info as numbers (ETA, distance, time to rest), not a moving map or turn-by-turn.
 
 **My phone can't find the PC.**
 Make sure both are on the same Wi-Fi, and allow RigDeck through the Windows firewall on
 *private* networks when it asks. You can always type the address shown in the RigDeck window.
 
-**Antivirus flagged the exe.**
-A freshly-built PyInstaller exe with no code-signing certificate often trips a false positive.
-Building it yourself from source (see BUILD.md) avoids this.
+**Antivirus flagged the exe, or it won't start.**
+A freshly-built PyInstaller exe with no code-signing certificate often trips a false positive,
+and Defender can interfere with it unpacking at launch. Add a Defender exclusion for the folder
+you keep RigDeck in (and your Temp folder) — see [`BUILD.md`](BUILD.md).
+
+**Hazards / diff lock don't stay lit after I quit and restart.**
+Some telemetry plugin builds don't report those two fields, so the button can't know what the
+truck was doing before RigDeck connected — it starts back at OFF and one tap resyncs it. If your
+plugin does report them, this doesn't apply; the light just follows the truck.
 
 ---
 
