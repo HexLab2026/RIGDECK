@@ -98,8 +98,8 @@ this is what lets RigDeck read the truck's data. RigDeck tells you if it's missi
 
 ## 📱 The Android app
 
-The `android/` folder has the companion app: a fullscreen wrapper that auto-discovers your PC
-so you never type an address. Build it in Android Studio, or sideload the APK from Releases.
+The companion app: a fullscreen wrapper that auto-discovers your PC
+so you never type an address. sideload the APK from Releases.
 
 ---
 
