@@ -1,6 +1,6 @@
 """
 ==========================================================================
-  rigdeck.py  —  RIGDECK  ·  v3.8
+  rigdeck.py  —  RIGDECK
 ==========================================================================
   Phone-screen cab panel for Euro Truck Simulator 2.
 
@@ -2206,7 +2206,7 @@ def _print_banner():
     """Print startup info. Safe even when there's no console (windowed exe)."""
     lines = [
         "=" * 58,
-        "  RIGDECK  ·  CAB PANEL  v3.0",
+        f"  RIGDECK  ·  CAB PANEL  v{APP_VERSION}",
         "=" * 58,
         f"  Phone URL :  http://{lan_ip()}:8600",
         f"  Debug     :  http://{lan_ip()}:8600/debug",
