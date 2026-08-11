@@ -114,7 +114,9 @@ See [`BUILD.md`](BUILD.md) — one double-click on Windows and it compiles the e
 
 ---
 
-### The telemetry plugin (required — RigDeck can't read the truck without this)
+### The telemetry plugin (required — RigDeck can't read the truck without this) 
+
+The Latest version is inc with this github
 
 RigDeck doesn't talk to the game directly. It reads data written by a separate plugin —
 [**RenCloud/scs-sdk-plugin**](https://github.com/RenCloud/scs-sdk-plugin) — that SCS Software's
