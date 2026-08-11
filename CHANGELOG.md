@@ -1,5 +1,37 @@
 # Changelog
 
+## v3.9
+
+### Added
+- **Speed unit toggle.** Tap the pill next to the live speed reading (STATUS
+  page) to flip between KM/H and MPH. This is a real toggle in the sense that
+  it *only* touches speed readings — the live dial, and TOP SPEED / AVG SPEED
+  in job history, since those are the same kind of figure. Nothing else on the
+  panel moves when you tap it.
+- **Game-aware region defaults.** ETS2 and ATS share the same telemetry plugin
+  and the same raw metric data — there's no separate "ATS conversion" at the
+  data level, just a different sensible starting point per game. Connect to
+  **ATS** and the panel shows American: miles, US gallons, MPG, 12-hour clock.
+  Connect to **ETS2** and it shows European: km, litres, L/100km, 24-hour
+  clock. This is locked to whichever game is actually connected — there's no
+  button for it, it just follows the game, same as route distance, fuel
+  level, AdBlue, average consumption and the delivery-deadline clock (DUE).
+- Fuel economy conversion (L/100km ↔ MPG) uses the correct **inverse**
+  relationship rather than a linear scale, since the two units measure
+  opposite things — volume-per-distance vs distance-per-volume. A straight
+  multiply would have quietly produced a wrong number that still looked
+  plausible.
+
+### Why speed is separate from everything else
+Speed is something a driver has a personal feel for, independent of which
+game or region they're actually in — a UK driver's own mph habit while
+playing an American-set game is the obvious case. Distance, fuel and clock
+format aren't a matter of taste the same way; they're what that game's
+economy and dashboard actually run on. So the speed reading is a free toggle,
+and everything else just tells the truth about the game you're connected to.
+
+---
+
 ## v3.8
 
 ### Added

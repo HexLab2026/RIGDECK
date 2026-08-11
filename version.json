@@ -1,6 +1,6 @@
 {
-  "version": "3.8",
+  "version": "3.9",
   "url": "https://github.com/HexLab2026/RIGDECK/releases/latest",
   "download": "https://github.com/HexLab2026/RIGDECK/releases/latest/download/RigDeck.exe",
-  "notes": "Added: diff lock control, auto tab switching, press feedback on bar buttons. Fixed: taps too short for the game to register (diff lock never fired, other buttons intermittent); ACTIVE JOB always showed LOADED with an owned trailer; fuel warning light flickering as range switched between our estimate and the game's; diff lock and hazard lights not staying on."
+  "notes": "Speed unit toggle (tap KM/H/MPH next to the speed reading) plus game-aware defaults: connect to ATS and the panel shows miles/gallons/MPG/12hr, connect to ETS2 and it shows km/litres/L-100km/24hr. Distance, fuel and clock format follow the game; only the live speed reading is a free toggle."
 }

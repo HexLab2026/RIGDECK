@@ -60,7 +60,7 @@ off (covers fuel stops, ferries, rest breaks). A collection or delivery clears i
 the cycle is always ready to go again next run.
 
 Not for you? It's a single flag near the top of the script (`AUTO_TAB_SWITCH = True`) — flip it
-false and the panel stays wherever you leave it, like it used to.
+off and the panel stays wherever you leave it, like it used to.
 
 ### 🚚 ACTIVE JOB
 - Live route distance and ETA.
