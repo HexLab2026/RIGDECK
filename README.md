@@ -98,15 +98,46 @@ off and the panel stays wherever you leave it, like it used to.
 ### The easy way (Windows, pre-built app)
 1. Download the latest **RigDeck.exe** from [Releases](https://github.com/HexLab2026/RIGDECK/releases/latest).
 2. Run it. A small window shows a web address (like `http://192.168.1.20:8600`).
-3. On your phone (same Wi-Fi), open that address in a browser — or open the RigDeck Android app,
-   which finds the PC automatically.
-4. Add it to your home screen for a fullscreen, app-like panel.
+3. On your phone (same Wi-Fi), open that address in a browser — **Android** users can instead
+   open the RigDeck app, which finds the PC automatically without typing the address.
+   **iPhone/iPad** don't need an app at all: RigDeck is a normal web page, so Safari works
+   exactly the same as the Android app does, just typing the address once instead of
+   auto-discovering it.
+4. Add it to your home screen for a fullscreen, app-like panel — this works in Safari on iOS
+   too, not just Android.
 
 **If it won't start** with a "Failed to load Python DLL" error, that's antivirus — see the
 troubleshooting note in [`BUILD.md`](BUILD.md).
 
 ### Build it yourself
 See [`BUILD.md`](BUILD.md) — one double-click on Windows and it compiles the exe for you.
+
+---
+
+### The telemetry plugin (required — RigDeck can't read the truck without this)
+
+RigDeck doesn't talk to the game directly. It reads data written by a separate plugin —
+[**RenCloud/scs-sdk-plugin**](https://github.com/RenCloud/scs-sdk-plugin) — that SCS Software's
+own SDK uses to share live telemetry over shared memory. This is a one-time, unrelated install,
+and it's just one file:
+
+1. Download the latest build from the
+   [**Releases page**](https://github.com/RenCloud/scs-sdk-plugin/releases/latest) (grab the
+   `.zip` — the exact filename changes with each version, the Releases link above always points
+   at whichever is current).
+2. Unzip it. Inside you'll see a `Demo` folder, a `Win32` folder and a `Win64` folder — **you
+   only want one file**: `Win64\scs-telemetry.dll`. Ignore everything else in the zip; the
+   `Demo` folder is developer sample code, not something you install, and `Win32` is the old
+   32-bit build almost nobody needs.
+3. Copy that one file, `scs-telemetry.dll`, into **`bin/win_x64/plugins/`** inside your ETS2 or
+   ATS install folder. That `plugins` folder usually doesn't exist yet on a fresh install — just
+   create it, then drop the DLL straight in.
+4. Do the same in your ATS install folder too if you play both — each game needs its own copy.
+5. Launch the game. You'll get a one-off popup saying the SDK plugin has been activated — click
+   OK. It only asks once per session.
+
+If RigDeck's STATUS page just shows `--` everywhere, this is almost always why — check
+`http://<pc-ip>:8600/debug` to see whether telemetry is actually connected.
 
 ---
 
@@ -129,20 +160,26 @@ suspension and trailer axle on the numpad, wipers/lights/couple-release on their
 defaults (`V` / `L` `K` / `T`). The panel lists the full set on startup if you ever need to
 check.
 
-You'll also need the telemetry plugin (the SCS SDK plugin) in your game's `plugins` folder —
-this is what lets RigDeck read the truck's data. RigDeck tells you if it's missing, via `/debug`.
-
 ---
 
-## 📱 The Android app
+## 📱 Android app, or just use the browser
 
-The `android/` folder has the companion app: a fullscreen wrapper that auto-discovers your PC
-so you never type an address. Build it in Android Studio, or sideload the APK from Releases.
+The pre-built Android app is **Android only** — it's a thin wrapper that auto-discovers your PC
+so you never have to type an address. The `android/` folder has the project; build it in Android
+Studio, or sideload the APK from Releases.
 
-It's a thin WebView shell — the actual panel lives on the PC and is served fresh each time, so
-you only need to rebuild the Android app if you're changing the wrapper itself (icon, fullscreen
-behaviour, discovery). Ordinary panel updates just need the PC exe rebuilt; reload the page on
-the phone (or fully close and reopen it) to pick them up.
+**There's no iOS app, and you don't need one.** RigDeck is just a web page — open the address
+shown in the RigDeck window (`http://<pc-ip>:8600`) in Safari on an iPhone or iPad and you get
+the exact same panel, same controls, same live updates. The only thing the Android app adds on
+top is auto-discovery so you don't have to type that address in; on iOS you type it once, add
+the page to your home screen (Share → Add to Home Screen), and it behaves like an app from then
+on — fullscreen, its own icon, no browser chrome.
+
+Either way, it's a thin shell over the same server: the actual panel lives on the PC and is
+served fresh each time, so you only need to rebuild the Android app if you're changing the
+wrapper itself (icon, fullscreen behaviour, discovery). Ordinary panel updates just need the PC
+exe rebuilt; reload the page on the phone (or fully close and reopen it) to pick them up — true
+whether you're on the Android app or Safari.
 
 ---
 
