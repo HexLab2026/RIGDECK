@@ -38,7 +38,44 @@
                     avg + top speed, income, EUR/km, fines picked up,
                     cargo damage, truck damage taken, early/late margin.
                     Log is per session (clears when this script exits).
-  v3.8          : DIFF LOCK + AUTO TAB SWITCHING, and three real bug fixes.
+  v3.9          : UNIT SYSTEM — mph/km-h toggle, and game-aware defaults.
+                    ADDED
+                      - A tappable unit pill next to the live speed reading
+                        (STATUS page). Tap to flip between KM/H and MPH.
+                        This is a genuine toggle: it only ever touches the
+                        live speed number (and, since they're the same kind
+                        of reading, TOP SPEED / AVG SPEED in the job
+                        history) — nothing else on the panel moves when
+                        you tap it.
+                      - Game-aware region defaults. The telemetry SDK
+                        reports which game is running (shared plugin, same
+                        raw metric data either way — there's no separate
+                        "ATS conversion", just a different sensible
+                        starting point). Connect to ATS and the panel
+                        shows American: miles, US gallons, MPG, 12-hour
+                        clock. Connect to ETS2 and it shows European: km,
+                        litres, L/100km, 24-hour clock. This is locked to
+                        whichever game is actually connected — there is no
+                        button for it, it just follows the game, the same
+                        way route distance, fuel level, AdBlue, average
+                        consumption and the delivery-deadline clock format
+                        (DUE) all do.
+                      - Fuel economy conversion (L/100km <-> MPG) uses the
+                        correct inverse relationship, not a linear scale —
+                        the two units measure opposite things (volume per
+                        distance vs distance per volume), so a straight
+                        multiply would have quietly given a wrong number.
+                    WHY TWO SEPARATE SETTINGS
+                      Speed is something a driver has a personal feel for
+                      and might want either way regardless of which game
+                      or region they're in (a UK driver's own speedo habit
+                      being the obvious example). Distance, fuel and the
+                      clock format aren't really a matter of taste in the
+                      same way — they're what that game's economy and dash
+                      actually run on. So the speed reading is a free
+                      toggle; everything else just tells the truth about
+                      the game you're connected to.
+
                     ADDED
                       - CONTROLS: DIFF LOCK button (own plate, below
                         LIFT / DROP). Bind "." (full stop) in-game.
@@ -260,7 +297,7 @@ from flask import Flask, Response, jsonify, request
 # ----------------------------------------------------------------------
 # Version + auto-update check (notify only - never overwrites itself)
 # ----------------------------------------------------------------------
-APP_VERSION = "3.8"          # bump this when you cut a new release
+APP_VERSION = "3.9"          # bump this when you cut a new release
 
 # Auto-switch tabs based on what you're doing: leaves CONTROLS for STATUS once
 # you're moving, and jumps to ACTIVE JOB when a delivery finishes (or you're
@@ -400,6 +437,7 @@ def read_telemetry():
 FIELDS = {
     # tacho
     "speed":        ["speed"],                                  # m/s
+    "game_id":      ["game"],  # 0=unknown, 1=ETS2, 2=ATS - same shared SDK, always metric
     "odometer":     ["truckOdometer", "odometer"],              # km
     "rest_min":     ["restStop", "nextRestStop"],               # game min
     "route_m":      ["routeDistance", "navigationDistance"],    # metres
@@ -1189,6 +1227,7 @@ def telemetry():
         engine=bool(getf(data, "engine")),
         park=bool(getf(data, "park_brake")),
         diff=getf(data, "diff_lock"),
+        sim={1: "ets2", 2: "ats"}.get(getf(data, "game_id")),  # None if unknown/unreported
         wipers=bool(getf(data, "wipers")),
         haz=bool(getf(data, "hazards"))
             or (
@@ -1401,6 +1440,10 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
 .speed{font-size:64px;font-weight:700;line-height:1;text-align:center;color:var(--acc);
   text-shadow:0 0 18px rgba(255,106,43,.35)}
 .speed small{font-size:14px;color:var(--lab);letter-spacing:3px;display:block;font-weight:600}
+.speed small.unitswitch{cursor:pointer;display:inline-block;margin-top:4px;padding:3px 10px;
+  border:1px solid var(--line);border-radius:4px;-webkit-tap-highlight-color:transparent;
+  transition:border-color .12s,color .12s}
+.speed small.unitswitch:active{border-color:var(--acc);color:var(--acc);transform:translateY(1px)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
 .cell{background:var(--well);border:1px solid var(--line);padding:8px 10px}
 .cell .l{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--lab)}
@@ -1656,7 +1699,7 @@ h1 small{color:var(--lab);font-size:10px;letter-spacing:3px;display:block;font-f
   <!-- ============ STATUS ============ -->
   <div class="page" id="p-status">
     <div class="plate"><span class="tick tl"></span><span class="tick br"></span>
-      <div class="speed"><span id="spd">--</span><small>KM/H</small></div>
+      <div class="speed"><span id="spd">--</span><small id="spdunit" class="unitswitch">KM/H</small></div>
       <div class="grid">
         <div class="cell"><div class="l">REST IN</div><div class="v" id="rest">--</div></div>
         <div class="cell"><div class="l">ETA</div><div class="v" id="eta">--</div></div>
@@ -1767,6 +1810,25 @@ document.querySelectorAll(".sw[data-key]").forEach(sw=>{
 
 /* engine start */
 let _fcState=null;   // fuel-reachability hysteresis state: null|"ok"|"warn"|"crit"
+let speedUnit="kmh";  // "kmh" | "mph" - the live speed dial ONLY. Tap to switch.
+let regionUnit="eu";  // "eu" | "us" - distance/fuel/clock. Follows the game, not the tap.
+let _gameDefaultApplied=false;  // resets on disconnect; governs speedUnit's starting point only
+let _userOverrode=false;        // once true, the speed toggle's default never re-applies
+let _lastKmh=0, _lastData=null, jobsCacheParsed=null;
+function drawSpeed(){
+  $("spd").textContent = Math.round(toSpeed(_lastKmh));
+  $("spdunit").textContent = speedU();
+}
+$("spdunit").addEventListener("click",()=>{
+  speedUnit = speedUnit==="mph" ? "kmh" : "mph";
+  _userOverrode=true;  // permanent for this session — outranks any game default, even after a reconnect
+  navigator.vibrate&&navigator.vibrate(20);
+  // redraw everything that shows a distance or speed, not just this number,
+  // using whatever telemetry/job data we already have — no need to wait for
+  // the next poll or re-fetch the job list.
+  if(_lastData) render(_lastData); else drawSpeed();
+  if(jobsCacheParsed) renderJobs(jobsCacheParsed);
+});
 let _moveSince=null, _stopSince=null, _autoOnStatus=false;
 let _holdActive=false, _holdMoveSince=null, _wasPending=false, _wasLoaded=false;
 let _wasEng=null;
@@ -1836,12 +1898,44 @@ function rangeAlert(bad){
 const hm=m=>{if(m==null||isNaN(m))return"--";m=Math.max(0,Math.round(m));
   return Math.floor(m/60)+"h "+String(m%60).padStart(2,"0")+"m";};
 const km=v=>v==null?"--":(v>=100?Math.round(v):v.toFixed(1));
-/* game clock: minutes since a Monday-origin epoch, matches route advisor */
+/* distance/speed unit toggle: one linear factor covers both, since 1 km/h
+   converts to mph by the exact same multiplier as 1 km converts to miles.
+   Deliberately does NOT touch anything measured in litres (fuel, AdBlue) or
+   tonnes (cargo) — those are separate unit families a km/mi toggle doesn't
+   imply an answer for, so they stay metric regardless. */
+/* SPEED — the one thing the tap toggle controls. Starts at a sensible
+   default for whichever game connects, then only ever changes when you
+   tap it. Nothing else on the panel reads this variable. */
+const speedU=()=>speedUnit==="mph"?"MPH":"KM/H";
+const toSpeed=v=>v==null?null:(speedUnit==="mph"?v*0.621371:v);
+/* REGION — locked to whichever game is actually running: ATS is American
+   (miles, US gallons, MPG, 12-hour clock), ETS2 is European (km, litres,
+   L/100km, 24-hour clock). This is NOT the toggle — it just silently
+   follows the game, the same way a real dash would, and it's what every
+   distance/volume/clock reading on the panel reads from instead of the
+   speed toggle. */
+const distU=()=>regionUnit==="us"?"MI":"KM";
+const toDist=v=>v==null?null:(regionUnit==="us"?v*0.621371:v);
+const volU=()=>regionUnit==="us"?"GAL":"L";
+const toVol=v=>v==null?null:(regionUnit==="us"?v*0.264172:v);
+const toMPG=l100=>(l100==null||l100<=0)?null:235.215/l100;
+/* game clock: minutes since a Monday-origin epoch, matches route advisor.
+   DUE is a clock time (a point in the day), not a duration, so — unlike
+   REST IN / LEFT / TIME, which are spans and read the same everywhere —
+   it genuinely does have a US-vs-Europe convention: 12-hour AM/PM vs
+   24-hour. Locked to the region (the game), same as distance/fuel — NOT
+   the speed toggle, which only ever touches the live speed reading. */
 const DAYS=["MON","TUE","WED","THU","FRI","SAT","SUN"];
 const due=m=>{if(m==null)return"--";
   const d=DAYS[Math.floor(m/1440)%7];
-  const h=String(Math.floor((m%1440)/60)).padStart(2,"0");
+  const h24=Math.floor((m%1440)/60);
   const mm=String(Math.floor(m%60)).padStart(2,"0");
+  if(regionUnit==="us"){
+    const ap=h24<12?"AM":"PM";
+    let h12=h24%12; if(h12===0)h12=12;
+    return d+" "+h12+":"+mm+" "+ap;
+  }
+  const h=String(h24).padStart(2,"0");
   return d+" "+h+":"+mm;};
 const left=m=>{if(m==null)return"--";const late=m<0;m=Math.abs(m);
   const dd=Math.floor(m/1440),h=Math.floor((m%1440)/60),mm=Math.floor(m%60);
@@ -1874,8 +1968,27 @@ async function poll(){
     const dot=$("dot");
     if(!d.game){dot.className="dot wait";$("lt").textContent="GAME";
       engineOn=false;parkOn=false;drawPark();hazOn=false;drawHaz();$("wipers").classList.remove("lit");$("wiperlbl").textContent="TAP";diffOn=false;drawDiff();fuelChime(false);rangeAlert(false);drawPD();
-      _moveSince=null;_stopSince=null;_autoOnStatus=false;_holdActive=false;_holdMoveSince=null;_wasPending=false;_wasLoaded=false;_wasEng=null;_stopFired=false;_moveFired=false;
+      _moveSince=null;_stopSince=null;_autoOnStatus=false;_holdActive=false;_holdMoveSince=null;_wasPending=false;_wasLoaded=false;_wasEng=null;_stopFired=false;_moveFired=false;_gameDefaultApplied=false;
       return;}
+    render(d);
+  }catch(e){$("dot").className="dot";$("lt").textContent="OFF";}
+}
+function render(d){
+    _lastData=d;
+    /* ATS players overwhelmingly expect mph/miles, ETS2 players km/h/km — set
+       that as the STARTING point once we know which game is running. This is
+       purely a default: the underlying telemetry is always metric regardless
+       of game (there's no separate "ATS conversion"), so the toggle uses the
+       exact same maths either way. A manual tap always wins from then on and
+       is never overridden again this session, however many polls follow. */
+    /* region: always reflects whichever game is actually connected — there's
+       no manual override for this one, it's meant to just be true. */
+    if(d.sim) regionUnit = d.sim==="ats" ? "us" : "eu";
+    /* speed: gets a sensible one-off starting point from the same game info,
+       but a manual tap on the toggle always wins from then on, forever, and
+       is never quietly reset back — that's the bit that's actually a toggle. */
+    if(!_userOverrode && !_gameDefaultApplied && d.sim){ speedUnit = d.sim==="ats" ? "mph" : "kmh"; _gameDefaultApplied=true; }
+    const dot=$("dot");
     dot.className="dot ok";$("lt").textContent="LINK";
     engineOn=!!d.engine;
     parkOn=!!d.park;drawPark();
@@ -1986,13 +2099,13 @@ async function poll(){
     const flow=g.fuel_warn||fpct<15;
     fuelChime(flow&&engineOn&&!d.paused);
     const fb=$("fbar");fb.style.width=fpct+"%";fb.classList.toggle("low",flow);
-    wv("rfuel",g.fuel==null?"--":Math.round(g.fuel)+" <em>/ "+Math.round(g.fuel_cap||0)+" L</em>",flow);
-    wv("rrange",g.range==null?"--":Math.round(g.range).toLocaleString("en-GB")+" <em>KM</em>"+(g.range_est?" <em style='color:var(--acc)'>&bull;</em>":""),false);
-    wv("ravg",g.avg100==null?"--":g.avg100.toFixed(1)+" <em>L/100KM</em>",false);
+    wv("rfuel",g.fuel==null?"--":Math.round(toVol(g.fuel))+" <em>/ "+Math.round(toVol(g.fuel_cap||0))+" "+volU()+"</em>",flow);
+    wv("rrange",g.range==null?"--":Math.round(toDist(g.range)).toLocaleString("en-GB")+" <em>"+distU()+"</em>"+(g.range_est?" <em style='color:var(--acc)'>&bull;</em>":""),false);
+    wv("ravg",g.avg100==null?"--":(regionUnit==="us"?toMPG(g.avg100).toFixed(1)+" <em>MPG</em>":g.avg100.toFixed(1)+" <em>L/100KM</em>"),false);
     const apct=(g.adb!=null&&g.adb_cap)?g.adb/g.adb_cap*100:0;
     const alow=g.adb_cap?apct<15:false;
     const ab=$("abar");ab.style.width=apct+"%";ab.classList.toggle("low",alow);
-    wv("radb",!g.adb_cap?"--":Math.round(g.adb)+" <em>/ "+Math.round(g.adb_cap)+" L</em>",alow);
+    wv("radb",!g.adb_cap?"--":Math.round(toVol(g.adb))+" <em>/ "+Math.round(toVol(g.adb_cap))+" "+volU()+"</em>",alow);
     wv("rair",g.air==null?"--":Math.round(g.air)+" <em>PSI</em>",g.air_warn||(g.air!=null&&g.air<65));
     wv("rbrk",g.brake_c==null?"--":Math.round(g.brake_c)+"<em>°C</em>",false);
     wv("roilt",g.oil_c==null?"--":Math.round(g.oil_c)+"<em>°C</em>",false);
@@ -2003,12 +2116,12 @@ async function poll(){
     const wpc=(id,v)=>wv(id,v==null?"--":Math.round(v*100)+"<em>%</em>",v!=null&&v>0.15);
     wpc("weng",W.eng);wpc("wtra",W.tra);wpc("wcab",W.cab);
     wpc("wcha",W.cha);wpc("wwhe",W.whe);
-    $("spd").textContent=Math.round(d.speed_kmh);
+    _lastKmh=d.speed_kmh||0;drawSpeed();
     $("rest").textContent=hm(d.rest_min);
     $("eta").textContent=hm(d.route_min);
-    $("route").innerHTML=d.route_km==null?"--":km(d.route_km)+" <em>KM</em>";
-    $("odo").innerHTML=d.odo_km==null?"--":Math.round(d.odo_km).toLocaleString()+" <em>KM</em>";
-    $("trip").innerHTML=d.trip_km==null?"--":d.trip_km.toFixed(1)+" <em>KM</em>";
+    $("route").innerHTML=d.route_km==null?"--":km(toDist(d.route_km))+" <em>"+distU()+"</em>";
+    $("odo").innerHTML=d.odo_km==null?"--":Math.round(toDist(d.odo_km)).toLocaleString()+" <em>"+distU()+"</em>";
+    $("trip").innerHTML=d.trip_km==null?"--":toDist(d.trip_km).toFixed(1)+" <em>"+distU()+"</em>";
 
     /* consignment */
     const j=d.job||{};const chip=$("jchip"),chip2=$("jchip2");
@@ -2034,7 +2147,7 @@ async function poll(){
       $("jpay").textContent=j.income==null?"--":"\u20AC"+j.income.toLocaleString("en-GB");
     }
     $("jeta").textContent=hm(d.route_min);
-    $("jroute").innerHTML=d.route_km==null?"--":km(d.route_km)+" <em>KM</em>";
+    $("jroute").innerHTML=d.route_km==null?"--":km(toDist(d.route_km))+" <em>"+distU()+"</em>";
 
     /* fuel reachability: can this tank reach the drop? (15% safety margin) */
     const fc=$("fuelchk"),ft=$("fctxt");
@@ -2061,15 +2174,15 @@ async function poll(){
       _fcState=next;
       if(next==="crit"){
         fc.className="fuelchk crit";
-        ft.textContent="WON'T REACH \u2014 SHORT BY "+Math.round(Math.max(0,dist-rng))+" KM";
+        ft.textContent="WON'T REACH \u2014 SHORT BY "+Math.round(toDist(Math.max(0,dist-rng)))+" "+distU();
         rangeAlert(true);
       }else if(next==="warn"){
         fc.className="fuelchk warn";
-        ft.textContent="TIGHT \u2014 "+Math.round(over)+" KM SPARE, FUEL SOON";
+        ft.textContent="TIGHT \u2014 "+Math.round(toDist(over))+" "+distU()+" SPARE, FUEL SOON";
         rangeAlert(true);
       }else{
         fc.className="fuelchk ok";
-        ft.textContent="RANGE OK \u2014 "+Math.round(over)+" KM SPARE";
+        ft.textContent="RANGE OK \u2014 "+Math.round(toDist(over))+" "+distU()+" SPARE";
         rangeAlert(false);
       }
     }
@@ -2080,7 +2193,6 @@ async function poll(){
       $("podhint").textContent="DELIVERED — FILE THE RUN";}
     else{cb.disabled=true;cb.className="bigbtn locked";
       $("podhint").textContent="DELIVER THE LOAD TO ENABLE";}
-  }catch(e){$("dot").className="dot";$("lt").textContent="OFF";}
 }
 setInterval(poll,700);poll();
 
@@ -2101,7 +2213,7 @@ async function loadJobs(){
   try{
     const r=await fetch("/jobs");const txt=await r.text();
     if(txt===jobsCache)return;
-    jobsCache=txt;renderJobs(JSON.parse(txt));
+    jobsCache=txt;const parsed=JSON.parse(txt);jobsCacheParsed=parsed;renderJobs(parsed);
   }catch(e){}
 }
 const DECKMARK='<svg class="lm" viewBox="0 0 120 120"><polygon points="18,6 102,6 114,18 114,102 102,114 18,114 6,102 6,18" fill="none" stroke="#C7CDD2" stroke-width="8"/><rect x="30" y="53" width="60" height="14" rx="4" fill="#FF6A2B"/></svg>';
@@ -2114,9 +2226,11 @@ function renderJobs(arr){
   el.innerHTML=arr.map(J=>{
     const cls=J.status==="FAILED"?"failed":"loaded";
     const route=((J.src_city||"?")+" \u2192 "+(J.dst_city||"?"));
-    const avg=(J.dist_km&&J.time_min)?Math.round(J.dist_km/(J.time_min/60))+" KM/H":null;
-    const l100=(J.dist_km&&J.fuel_l)?(J.fuel_l/J.dist_km*100).toFixed(1)+" L/100":null;
-    const perkm=(J.dist_km&&J.income)?"\u20AC"+Math.round(J.income/J.dist_km):null;
+    const avgKmh=(J.dist_km&&J.time_min)?J.dist_km/(J.time_min/60):null;
+    const avg=avgKmh==null?null:Math.round(toSpeed(avgKmh))+" "+speedU();
+    const l100raw=(J.dist_km&&J.fuel_l)?(J.fuel_l/J.dist_km*100):null;
+    const l100=l100raw==null?null:(regionUnit==="us"?toMPG(l100raw).toFixed(1)+" MPG":l100raw.toFixed(1)+" L/100");
+    const perkm=(J.dist_km&&J.income)?"\u20AC"+Math.round(J.income/toDist(J.dist_km)):null;
     let del=null;
     if(J.late_min!=null){del=J.late_min>0?hm(J.late_min)+" LATE":hm(-J.late_min)+" EARLY";}
     let pod="";
@@ -2144,15 +2258,15 @@ function renderJobs(arr){
       +'<div class="crow"><div class="cl">TO</div><div class="cv">'+esc(J.dst_comp||"--")
         +(J.dst_city?' <span>\u00b7 '+esc(J.dst_city)+'</span>':'')+'</div></div>'
       +'<div class="jgrid" style="margin-top:8px">'
-      +cell("DISTANCE",J.dist_km==null?null:J.dist_km.toFixed(1)+" KM")
+      +cell("DISTANCE",J.dist_km==null?null:toDist(J.dist_km).toFixed(1)+" "+distU())
       +cell("TIME",J.time_min==null?null:hm(J.time_min))
       +cell("REAL TIME",J.real_s==null?null:(J.real_s<3600?Math.round(J.real_s/60)+"m":Math.floor(J.real_s/3600)+"h "+String(Math.round(J.real_s%3600/60)).padStart(2,"0")+"m"))
-      +cell("FUEL USED",J.fuel_l==null?null:J.fuel_l.toFixed(1)+" L")
+      +cell("FUEL USED",J.fuel_l==null?null:toVol(J.fuel_l).toFixed(1)+" "+volU())
       +cell("AVG BURN",l100)
       +cell("AVG SPEED",avg)
-      +cell("TOP SPEED",J.vmax==null?null:J.vmax+" KM/H")
+      +cell("TOP SPEED",J.vmax==null?null:Math.round(toSpeed(J.vmax))+" "+speedU())
       +cell("INCOME",J.income==null?null:"\u20AC"+J.income.toLocaleString("en-GB"))
-      +cell("PER KM",perkm)
+      +cell("PER "+distU(),perkm)
       +cell("CARGO DMG",J.cargo_dmg==null?null:(J.cargo_dmg*100).toFixed(1)+"%")
       +cell("TRUCK DMG",J.truck_dmg==null?null:"+"+(J.truck_dmg*100).toFixed(1)+"%")
       +cell("FINES",!J.fines?null:"\u20AC"+J.fines.toLocaleString("en-GB"))
